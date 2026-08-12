@@ -50,7 +50,7 @@ jobs:
       - run: npm run build
 
       - name: Verify Windows signing credentials
-        if: matrix.platform == 'win'
+        if: matrix.platform == 'win' && !contains(github.ref_name, '-preview.')
         shell: bash
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
@@ -62,7 +62,7 @@ jobs:
           fi
 
       - name: Verify macOS signing and notarization credentials
-        if: matrix.platform == 'mac'
+        if: matrix.platform == 'mac' && !contains(github.ref_name, '-preview.')
         shell: bash
         env:
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -76,7 +76,8 @@ jobs:
             exit 1
           fi
 
-      - name: Build distributables
+      - name: Build signed distributables
+        if: ${{ !contains(github.ref_name, '-preview.') }}
         run: npx electron-builder --${{ matrix.platform }} --publish never
         env:
           CSC_LINK: ${{ matrix.platform == 'win' && secrets.WIN_CSC_LINK || matrix.platform == 'mac' && secrets.MAC_CSC_LINK || '' }}
@@ -84,6 +85,18 @@ jobs:
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Build unsigned preview distributables
+        if: ${{ contains(github.ref_name, '-preview.') }}
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
+            npx electron-builder --mac --publish never -c.mac.notarize=false
+          else
+            npx electron-builder --${{ matrix.platform }} --publish never
+          fi
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - uses: actions/upload-artifact@v4
         with:
@@ -114,3 +127,4 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

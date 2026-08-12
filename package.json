@@ -4,7 +4,10 @@
   "description": "A local-first Markdown editor built for people and AI agents",
   "private": true,
   "main": "dist/main/index.js",
-  "author": "QuillMesh contributors",
+  "author": {
+    "name": "QuillMesh contributors",
+    "email": "304804837+lbiao2965-bot@users.noreply.github.com"
+  },
   "license": "MIT",
   "homepage": "https://github.com/lbiao2965-bot/QuillMesh#readme",
   "bugs": {
