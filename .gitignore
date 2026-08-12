@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.npm-cache/
+!plugins/quillmesh-companion/dist/
+!plugins/quillmesh-companion/dist/**
+
+# Packaged application artifacts
+release/
+release-final*/
+
+# Local scratch and exported previews
+.tmp/
+README_CN.docx
+Untitled.md
+template.html
+
+# Logs, coverage, and local tool state
+*.log
+coverage/
+.DS_Store
+Thumbs.db
+.claude/
+.idea/
+.vscode/
+log.md
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example

@@ -1,0 +1,38 @@
+{
+  "name": "quillmesh-companion",
+  "version": "0.2.2+codex.20260812075641",
+  "description": "A live, local-first Markdown collaboration bridge between Codex and QuillMesh.",
+  "author": {
+    "name": "QuillMesh contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "markdown",
+    "latex",
+    "katex",
+    "quillmesh",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "QuillMesh Companion",
+    "shortDescription": "Live context, reviewed Diff edits, conflict protection, and exports.",
+    "longDescription": "Connect Codex to the active QuillMesh document and selection, open exact sections, diagnose formulas, tables, quotes, and images, review edits as a Diff in QuillMesh, preserve revision conflicts, refresh the editor after accepted writes, and export PDF, PNG, HTML, or Word.",
+    "developerName": "QuillMesh contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Read my current QuillMesh selection and suggest an edit.",
+      "Check this document's formulas, tables, quotes, and image paths.",
+      "Show this edit as a Diff in QuillMesh before writing."
+    ],
+    "brandColor": "#146B8C",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

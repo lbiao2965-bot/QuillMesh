@@ -1,0 +1,70 @@
+appId: io.quillmesh.desktop
+productName: QuillMesh
+copyright: Copyright © 2026 QuillMesh contributors
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - dist/**/*
+
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+  - from: LICENSE
+    to: LICENSE
+  - from: NOTICE
+    to: NOTICE
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+  - from: resources/templates
+    to: templates
+  - from: resources/demo
+    to: demo
+
+npmArgs:
+  - "--loglevel=error"
+
+afterPack: ./scripts/afterPack.js
+
+fileAssociations:
+  - ext: md
+    name: Markdown Document
+    role: Editor
+    mimeType: text/markdown
+  - ext: markdown
+    name: Markdown Document
+    role: Editor
+    mimeType: text/markdown
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  icon: resources/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  notarize: true
+
+win:
+  target:
+    - nsis
+  icon: resources/icon.ico
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+  icon: resources/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico

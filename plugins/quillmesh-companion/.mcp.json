@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "quillmesh": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/server.mjs"],
+      "cwd": "."
+    }
+  }
+}

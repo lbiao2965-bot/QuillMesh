@@ -1,0 +1,29 @@
+{
+  "name": "@quillmesh/codex-companion",
+  "version": "0.2.2",
+  "private": true,
+  "type": "module",
+  "homepage": "https://github.com/lbiao2965-bot/QuillMesh/tree/main/plugins/quillmesh-companion",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lbiao2965-bot/QuillMesh.git",
+    "directory": "plugins/quillmesh-companion"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node tests/server-smoke.mjs",
+    "test:bridge": "node tests/bridge-integration.mjs",
+    "test:proposal": "node tests/proposal-integration.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.3",
+    "katex": "^0.16.22",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.7",
+    "@types/node": "^22.15.3",
+    "esbuild": "^0.25.4",
+    "typescript": "^5.8.3"
+  }
+}
