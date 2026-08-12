@@ -172,6 +172,17 @@ const en = {
   codexNoDocument: 'Open a document first.',
   codexDiffPending: 'Codex Diff pending',
   codexDiffSafe: 'Changes are written only after you accept',
+  codexProposalTitle: 'Codex change proposal',
+  codexReject: 'Reject',
+  codexAccept: 'Accept changes',
+  codexRevisionVerified: 'Revision verified',
+  codexWriteAfterAccept: 'Written to disk only after you accept',
+  codexDirtyBlock: 'Unsaved changes. Save before accepting.',
+  codexDocChanged: 'Document changed — review again',
+  codexEditLabel: 'Edit',
+  codexDiffShortcuts: 'Esc Reject · Ctrl+Enter Accept',
+  tableRow: 'Row',
+  tableColumn: 'Column',
   welcomeMarkdown: '# Welcome to QuillMesh\n\nStart typing here...\n',
 } as const
 
@@ -351,6 +362,17 @@ const zhCN: Record<TranslationKey, string> = {
   codexNoDocument: '\u8bf7\u5148\u6253\u5f00\u6587\u6863',
   codexDiffPending: 'Codex Diff \u5f85\u5904\u7406',
   codexDiffSafe: '\u53ea\u6709\u63a5\u53d7\u540e\u624d\u4f1a\u5199\u5165',
+  codexProposalTitle: 'Codex 修改建议',
+  codexReject: '拒绝',
+  codexAccept: '接受修改',
+  codexRevisionVerified: 'revision 已校验',
+  codexWriteAfterAccept: '接受后才会写入磁盘',
+  codexDirtyBlock: '文档有未保存修改，需先保存后才能接受',
+  codexDocChanged: '文件发生变化，请重新核对',
+  codexEditLabel: '修改',
+  codexDiffShortcuts: 'Esc 拒绝 · Ctrl+Enter 接受',
+  tableRow: '行',
+  tableColumn: '列',
 }
 
 const messages: Record<AppLanguage, Record<TranslationKey, string>> = {

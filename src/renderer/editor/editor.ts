@@ -32,6 +32,7 @@ import { katexOptionsCtx, mathInlineInputRule, mathInlineSchema, remarkMathPlugi
 import { t } from '../i18n'
 import { sectionEndFromHeadings, sectionMoveInsertion } from '../outline-reorder'
 import { collapsedHeadingStep } from '../heading-collapse'
+import { iconSvg, setButtonIcon } from '../icons'
 
 import 'katex/dist/katex.min.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
@@ -558,8 +559,8 @@ function positionHeadingControls(): void {
     if (!heading || heading.classList.contains('colamd-section-hidden')) { button.hidden = true; continue }
     const rect = heading.getBoundingClientRect()
     button.hidden = rect.bottom < 52 || rect.top > window.innerHeight
-    button.style.left = `${Math.max(6, rect.left - 37)}px`
-    button.style.top = `${rect.top + Math.max(0, (rect.height - 30) / 2)}px`
+    button.style.left = `${Math.max(6, rect.left - 31)}px`
+    button.style.top = `${rect.top + Math.max(0, (rect.height - 24) / 2)}px`
   }
 }
 
@@ -582,7 +583,7 @@ function renderHeadingControls(headings: readonly HTMLHeadingElement[]): void {
     button.dataset.headingKey = key
     button.dataset.headingIndex = String(index)
     button.className = 'heading-collapse-control'
-    button.textContent = collapsed ? '▸' : '▾'
+    button.innerHTML = iconSvg(collapsed ? 'chevronRight' : 'chevronDown', 14)
     button.title = collapsed ? t('expandSection') : t('collapsedSection')
     button.setAttribute('aria-label', button.title)
     button.setAttribute('aria-expanded', String(!collapsed))
@@ -672,7 +673,7 @@ function installImageResizeControls(root: HTMLElement): void {
   frame.hidden = true
   const size = document.createElement('span'); size.className = 'colamd-image-size'
   frame.append(size)
-  for (const direction of ['nw', 'ne', 'sw', 'se']) {
+  for (const direction of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) {
     const handle = document.createElement('button')
     handle.type = 'button'; handle.className = `colamd-image-resize-handle ${direction}`; handle.dataset.direction = direction; handle.setAttribute('aria-label', 'Resize image')
     frame.append(handle)
@@ -707,11 +708,22 @@ function installImageResizeControls(root: HTMLElement): void {
     event.preventDefault(); event.stopPropagation(); dragging = true
     const image = activeImage
     const startX = event.clientX
+    const startY = event.clientY
     const startWidth = image.getBoundingClientRect().width
-    const west = handle.dataset.direction?.includes('w') ?? false
+    const startHeight = image.getBoundingClientRect().height
+    // Height stays `auto`, so vertical drags are mapped back to width through
+    // the aspect ratio to keep corner and edge handles feeling consistent.
+    const aspect = startWidth / Math.max(1, startHeight)
+    const direction = handle.dataset.direction ?? 'se'
     handle.setPointerCapture(event.pointerId)
     const move = (moveEvent: PointerEvent): void => {
-      const delta = (moveEvent.clientX - startX) * (west ? -1 : 1)
+      const horizontal = direction.includes('e') ? moveEvent.clientX - startX
+        : direction.includes('w') ? startX - moveEvent.clientX
+          : 0
+      const vertical = (direction.includes('s') ? moveEvent.clientY - startY
+        : direction.includes('n') ? startY - moveEvent.clientY
+          : 0) * aspect
+      const delta = horizontal !== 0 && vertical !== 0 ? Math.max(horizontal, vertical) : horizontal + vertical
       const maxWidth = Math.max(120, root.getBoundingClientRect().width)
       const width = Math.min(maxWidth, Math.max(48, startWidth + delta))
       image.style.width = `${width}px`; image.style.height = 'auto'; position()
@@ -745,21 +757,23 @@ function installTableAndCodeTools(root: HTMLElement): void {
     if (!activeTable) return activeCell?.isConnected ? activeCell : null
     return activeTable.rows[0]?.cells[activeColumnIndex] ?? activeTable.querySelector('td,th')
   }
-  const makeTableButton = (parent: HTMLElement, label: string, title: string, action: () => void) => {
-    const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.title = title; button.setAttribute('aria-label', title)
+  const makeTableButton = (parent: HTMLElement, icon: Parameters<typeof setButtonIcon>[1], title: string, action: () => void, extraClass = '') => {
+    const button = document.createElement('button'); button.type = 'button'; setButtonIcon(button, icon, 15); button.title = title; button.setAttribute('aria-label', title)
+    if (extraClass) button.className = extraClass
     button.addEventListener('pointerdown', (event) => { event.preventDefault(); event.stopPropagation(); action() })
     parent.append(button)
   }
-  makeTableButton(tableAlign, '☰', t('alignLeft'), () => runTableCommand('align-left', currentTableCell()))
-  makeTableButton(tableAlign, '≡', t('alignCenter'), () => runTableCommand('align-center', currentTableCell()))
-  makeTableButton(tableAlign, '☷', t('alignRight'), () => runTableCommand('align-right', currentTableCell()))
-  makeTableButton(tableActions, '⧉', t('copyTable'), () => {
+  makeTableButton(tableAlign, 'alignLeft', t('alignLeft'), () => runTableCommand('align-left', currentTableCell()))
+  makeTableButton(tableAlign, 'alignCenter', t('alignCenter'), () => runTableCommand('align-center', currentTableCell()))
+  makeTableButton(tableAlign, 'alignRight', t('alignRight'), () => runTableCommand('align-right', currentTableCell()))
+  makeTableButton(tableActions, 'copy', t('copyTable'), () => {
     if (!activeTable) return
     const text = Array.from(activeTable.rows).map((row) => Array.from(row.cells).map((cell) => cell.innerText.trim()).join('\t')).join('\n')
     void window.electronAPI.copyTable(activeTable.outerHTML, text)
   })
-  makeTableButton(tableActions, '⌫', t('deleteTable'), () => runTableCommand('delete-table', currentTableCell()))
-  tableTools.append(tableAlign, tableActions); document.body.append(tableTools)
+  makeTableButton(tableActions, 'trash', t('deleteTable'), () => runTableCommand('delete-table', currentTableCell()), 'danger')
+  const toolsDivider = document.createElement('span'); toolsDivider.className = 'colamd-table-tools-divider'
+  tableTools.append(tableAlign, toolsDivider, tableActions); document.body.append(tableTools)
 
   const copyCode = document.createElement('button'); copyCode.type = 'button'; copyCode.className = 'colamd-code-copy'; copyCode.textContent = t('copyCode'); copyCode.hidden = true
   const codeOptions = document.createElement('div'); codeOptions.className = 'colamd-code-options'; codeOptions.hidden = true
@@ -771,9 +785,9 @@ function installTableAndCodeTools(root: HTMLElement): void {
   const positionTable = (): void => {
     if (!activeTable?.isConnected) { tableTools.hidden = true; return }
     const rect = activeTable.getBoundingClientRect()
-    tableTools.style.left = `${Math.max(8, rect.left)}px`
+    const maxLeft = Math.max(8, window.innerWidth - tableTools.offsetWidth - 8)
+    tableTools.style.left = `${Math.min(Math.max(8, rect.left), maxLeft)}px`
     tableTools.style.top = `${Math.max(54, rect.top - tableTools.offsetHeight - 6)}px`
-    tableTools.style.width = `${Math.max(180, Math.min(rect.width, window.innerWidth - Math.max(8, rect.left) - 8))}px`
   }
   const positionCode = (): void => {
     if (!activePre?.isConnected) { copyCode.hidden = true; codeOptions.hidden = true; return }

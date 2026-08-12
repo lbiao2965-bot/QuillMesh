@@ -33,6 +33,7 @@ import { aggregateCloseCanComplete } from './close-save'
 import { conflictTargetToCancel } from './conflict-routing'
 import { buildExportDocument } from './export-document'
 import { markdownSectionAtLine, sourceSelectionContext } from './codex-context'
+import { iconSvg, setButtonIcon, type IconName } from './icons'
 import type { CodexSendKind, DiskRevision, DocumentPayload, ExportFormat, RecentFile } from '../preload/index'
 import './themes/base.css'
 
@@ -180,6 +181,35 @@ function toggleCodexMenu(): void {
   const rect = button.getBoundingClientRect(); showMenu(menu, rect.right - 244, rect.bottom + 5)
 }
 
+type CodexDiffLine = { kind: 'ctx' | 'del' | 'add'; text: string }
+
+/** Minimal line LCS so proposals read as red removed / green added rows. */
+function codexDiffLines(before: string, after: string): CodexDiffLine[] {
+  const a = before.split('\n')
+  const b = after.split('\n')
+  // Pathological inputs fall back to a plain before/after dump.
+  if (a.length * b.length > 250000) {
+    return [...a.map((text): CodexDiffLine => ({ kind: 'del', text })), ...b.map((text): CodexDiffLine => ({ kind: 'add', text }))]
+  }
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0))
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  const out: CodexDiffLine[] = []
+  let i = 0
+  let j = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { out.push({ kind: 'ctx', text: a[i] }); i++; j++ }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ kind: 'del', text: a[i] }); i++ }
+    else { out.push({ kind: 'add', text: b[j] }); j++ }
+  }
+  while (i < a.length) out.push({ kind: 'del', text: a[i++] })
+  while (j < b.length) out.push({ kind: 'add', text: b[j++] })
+  return out
+}
+
 function bridgeProposal(requestId: string, payload: Record<string, unknown>): void {
   dismissActiveCodexProposal?.('rejected')
   const session = activeSession()
@@ -196,18 +226,48 @@ function bridgeProposal(requestId: string, payload: Record<string, unknown>): vo
   }
   const panel = document.createElement('section')
   panel.id = 'codex-diff-popover'; panel.className = 'codex-diff-popover'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'false')
-  const title = document.createElement('strong'); title.textContent = typeof payload.title === 'string' ? payload.title : 'Codex 修改建议'
-  const status = document.createElement('span'); status.className = 'codex-diff-status'; status.textContent = session.dirty ? '文档有未保存修改，需先保存后才能接受' : '确认后才会写入磁盘'
-  const diff = document.createElement('div'); diff.className = 'codex-inline-diff'
-  for (const edit of edits) {
-    const before = document.createElement('pre'); before.className = 'codex-diff-before'; before.textContent = edit.search
-    const after = document.createElement('pre'); after.className = 'codex-diff-after'; after.textContent = edit.replacement
-    diff.append(before, after)
-  }
+
+  const header = document.createElement('header'); header.className = 'codex-diff-header'
+  const titleRow = document.createElement('div'); titleRow.className = 'codex-diff-title-row'
+  titleRow.innerHTML = iconSvg('sparkle', 15)
+  const title = document.createElement('strong'); title.textContent = typeof payload.title === 'string' ? payload.title : t('codexProposalTitle')
+  titleRow.append(title)
+  const chip = document.createElement('span'); chip.className = 'codex-diff-chip'
+  header.append(titleRow, chip)
+
+  const body = document.createElement('div'); body.className = 'codex-diff-body'
+  edits.forEach((edit, index) => {
+    const lines = codexDiffLines(edit.search, edit.replacement)
+    const added = lines.filter((line) => line.kind === 'add').length
+    const removed = lines.filter((line) => line.kind === 'del').length
+    const item = document.createElement('details'); item.className = 'codex-diff-edit'; item.open = true
+    const summary = document.createElement('summary')
+    summary.innerHTML = `${iconSvg('chevronDown', 13)}<span class="codex-diff-edit-name">${t('codexEditLabel')} ${index + 1}</span><span class="codex-diff-stats"><b class="add">+${added}</b><b class="del">−${removed}</b></span>`
+    const list = document.createElement('div'); list.className = 'codex-diff-lines'
+    for (const line of lines) {
+      const row = document.createElement('div'); row.className = `codex-diff-line ${line.kind}`
+      const sign = document.createElement('span'); sign.className = 'codex-diff-sign'; sign.textContent = line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ' '
+      const text = document.createElement('span'); text.className = 'codex-diff-text'; text.textContent = line.text || ' '
+      row.append(sign, text); list.append(row)
+    }
+    item.append(summary, list); body.append(item)
+  })
+
+  const footer = document.createElement('footer'); footer.className = 'codex-diff-footer'
+  const hint = document.createElement('span'); hint.className = 'codex-diff-hint'; hint.textContent = t('codexDiffShortcuts')
   const actions = document.createElement('div'); actions.className = 'codex-diff-actions'
-  const reject = document.createElement('button'); reject.type = 'button'; reject.textContent = '拒绝'
-  const accept = document.createElement('button'); accept.type = 'button'; accept.className = 'primary'; accept.textContent = '接受修改'; accept.disabled = session.dirty
-  actions.append(reject, accept); panel.append(title, status, diff, actions); document.body.appendChild(panel)
+  const reject = document.createElement('button'); reject.type = 'button'; reject.className = 'ghost'; reject.textContent = t('codexReject')
+  const accept = document.createElement('button'); accept.type = 'button'; accept.className = 'primary'; accept.textContent = t('codexAccept'); accept.disabled = session.dirty
+  actions.append(reject, accept); footer.append(hint, actions)
+  panel.append(header, body, footer); document.body.appendChild(panel)
+
+  const updateChip = (): void => {
+    if (session.dirty) { chip.className = 'codex-diff-chip warning'; chip.textContent = t('codexDirtyBlock') }
+    else { chip.className = 'codex-diff-chip ok'; chip.textContent = `${t('codexRevisionVerified')} · ${t('codexWriteAfterAccept')}` }
+  }
+  updateChip()
+  const markChanged = (): void => { chip.className = 'codex-diff-chip changed'; chip.textContent = t('codexDocChanged') }
+  window.addEventListener('colamd-document-changed', markChanged)
   setCodexDiffPending(true)
   const anchor = getEditorSelectionContext(session.content).anchor
   if (anchor) { panel.style.left = `${Math.max(16, Math.min(window.innerWidth - 560, anchor.left))}px`; panel.style.top = `${Math.max(70, Math.min(window.innerHeight - 360, anchor.bottom + 8))}px` }
@@ -216,6 +276,7 @@ function bridgeProposal(requestId: string, payload: Record<string, unknown>): vo
     if (finished) return
     finished = true
     document.removeEventListener('keydown', reviewKeys, true)
+    window.removeEventListener('colamd-document-changed', markChanged)
     panel.remove()
     if (dismissActiveCodexProposal === finish) dismissActiveCodexProposal = null
     setCodexDiffPending(false)
@@ -474,9 +535,11 @@ function renderTabs(): void {
     const tab = document.createElement('button'); tab.type = 'button'; tab.className = 'document-tab'; tab.role = 'tab'
     tab.dataset.documentId = session.documentId; tab.setAttribute('aria-selected', String(session.documentId === activeDocumentId))
     if (session.documentId === activeDocumentId) tab.classList.add('active')
-    const label = document.createElement('span'); label.textContent = `${session.dirty ? '● ' : ''}${session.displayName}`
-    const close = document.createElement('span'); close.className = 'tab-close'; close.textContent = '×'; close.title = t('closeTab'); close.setAttribute('aria-label', t('closeTab'))
-    tab.append(label, close); root.appendChild(tab)
+    if (session.dirty) tab.classList.add('dirty')
+    const dirty = document.createElement('span'); dirty.className = 'tab-dirty-dot'; dirty.setAttribute('aria-hidden', 'true')
+    const label = document.createElement('span'); label.className = 'tab-label'; label.textContent = session.displayName
+    const close = document.createElement('span'); close.className = 'tab-close'; close.innerHTML = iconSvg('x', 11); close.title = t('closeTab'); close.setAttribute('aria-label', t('closeTab'))
+    tab.append(dirty, label, close); root.appendChild(tab)
   }
 }
 
@@ -750,10 +813,16 @@ function renderWelcomeRecent(): void {
 function showMenu(element: HTMLElement, x: number, y: number): void {
   element.hidden = false
   const margin = 8
-  const left = Math.min(Math.max(margin, x), Math.max(margin, window.innerWidth - element.offsetWidth - margin))
-  const top = Math.min(Math.max(margin, y), Math.max(margin, window.innerHeight - element.offsetHeight - margin))
-  element.style.left = `${left}px`
-  element.style.top = `${top}px`
+  const width = element.offsetWidth
+  const height = element.offsetHeight
+  // Flip toward the window interior when the menu would overflow an edge,
+  // instead of letting it slide away from the pointer.
+  const overflowRight = x + width > window.innerWidth - margin
+  const overflowBottom = y + height > window.innerHeight - margin
+  const left = overflowRight ? Math.max(margin, x - width) : x
+  const top = overflowBottom ? Math.max(margin, y - height) : y
+  element.style.left = `${Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin))}px`
+  element.style.top = `${Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin))}px`
 }
 function hideMenus(): void {
   for (const id of ['command-palette', 'slash-command-menu', 'selection-command-menu', 'image-resource-menu', 'link-preview', 'codex-menu']) document.getElementById(id)?.setAttribute('hidden', '')
@@ -832,11 +901,11 @@ function contextMenuSurface(): HTMLDivElement {
 
 function appendClipboardGrid(surface: HTMLElement, hasSelection: boolean): void {
   const grid = document.createElement('div'); grid.className = 'selection-edit-grid'
-  const actions: Array<['cut' | 'copy' | 'paste' | 'delete', string, string]> = [
-    ['cut', '✂', t('cut')], ['copy', '⧉', t('copy')], ['paste', '▣', t('paste')], ['delete', '⌫', t('deleteCurrentSelection')],
+  const actions: Array<['cut' | 'copy' | 'paste' | 'delete', IconName, string]> = [
+    ['cut', 'cut', t('cut')], ['copy', 'copy', t('copy')], ['paste', 'paste', t('paste')], ['delete', 'trash', t('deleteCurrentSelection')],
   ]
-  for (const [action, glyph, label] of actions) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'selection-edit-icon'; button.textContent = glyph; button.title = label; button.setAttribute('aria-label', button.title)
+  for (const [action, icon, label] of actions) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'selection-edit-icon'; setButtonIcon(button, icon, 15); button.title = label; button.setAttribute('aria-label', button.title)
     button.disabled = action !== 'paste' && !hasSelection
     button.addEventListener('click', () => { hideMenus(); window.electronAPI.performEdit(action) })
     grid.append(button)
@@ -852,27 +921,20 @@ function appendMenuRow(parent: HTMLElement, labelText: string, action: () => voi
   return item
 }
 
-function appendInsertMenu(surface: HTMLElement): void {
-  const host = document.createElement('div'); host.className = 'selection-submenu-host'
-  const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'selection-format-row'; trigger.innerHTML = `<span>${t('slashMenu')}</span><span>›</span>`
+/** Shared hover/click submenu used by the insert menu and table row/column groups. */
+function appendSubmenu(parent: HTMLElement, labelText: string, icon: IconName, items: Array<[string, () => void, string?]>, bordered = false): void {
+  const host = document.createElement('div'); host.className = bordered ? 'selection-submenu-host bordered' : 'selection-submenu-host'
+  const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'selection-format-row'
+  trigger.innerHTML = `<span class="selection-row-label">${iconSvg(icon, 14)}<span>${labelText}</span></span><span class="selection-row-chevron">${iconSvg('chevronRight', 13)}</span>`
   const submenu = document.createElement('div'); submenu.className = 'selection-insert-submenu'; submenu.hidden = true
-  const insertActions: Array<[string, () => void, string?]> = [
-    [t('insertImage'), () => { void insertImageFromPicker() }, 'Ctrl+Shift+I'],
-    [t('insertTable'), () => { insertTable() }, 'Ctrl+T'],
-    [t('codeFence'), () => { runFormattingCommand('code-fence') }, 'Ctrl+Shift+K'],
-    [t('insertFormula'), () => showMathModal(), 'Ctrl+Shift+M'],
-    [t('horizontalRule'), () => { runFormattingCommand('horizontal-rule') }],
-    [t('insertParagraphAbove'), () => { insertParagraphNearSelection('before') }],
-    [t('insertParagraphBelow'), () => { insertParagraphNearSelection('after') }],
-  ]
-  for (const [label, action, hint] of insertActions) appendMenuRow(submenu, label, action, hint)
+  for (const [label, action, hint] of items) appendMenuRow(submenu, label, action, hint)
   const position = (): void => {
     if (submenu.hidden) return
     const hostRect = host.getBoundingClientRect()
     const maximumHeight = Math.max(180, window.innerHeight - 16)
     submenu.style.maxHeight = `${maximumHeight}px`
     submenu.style.overflowY = 'auto'
-    submenu.classList.toggle('opens-left', hostRect.right + 252 > window.innerWidth - 8)
+    submenu.classList.toggle('opens-left', hostRect.right + 244 > window.innerWidth - 8)
     const height = Math.min(submenu.scrollHeight, maximumHeight)
     const spaceBelow = window.innerHeight - hostRect.top - 8
     const spaceAbove = hostRect.bottom - 8
@@ -884,7 +946,20 @@ function appendInsertMenu(surface: HTMLElement): void {
   const hide = (): void => { submenu.hidden = true }
   host.addEventListener('mouseenter', show); host.addEventListener('mouseleave', hide)
   trigger.addEventListener('click', (event) => { event.stopPropagation(); if (submenu.hidden) show(); else hide() })
-  host.append(trigger, submenu); surface.append(host)
+  host.append(trigger, submenu); parent.append(host)
+}
+
+function appendInsertMenu(surface: HTMLElement): void {
+  const insertActions: Array<[string, () => void, string?]> = [
+    [t('insertImage'), () => { void insertImageFromPicker() }, 'Ctrl+Shift+I'],
+    [t('insertTable'), () => { insertTable() }, 'Ctrl+T'],
+    [t('codeFence'), () => { runFormattingCommand('code-fence') }, 'Ctrl+Shift+K'],
+    [t('insertFormula'), () => showMathModal(), 'Ctrl+Shift+M'],
+    [t('horizontalRule'), () => { runFormattingCommand('horizontal-rule') }],
+    [t('insertParagraphAbove'), () => { insertParagraphNearSelection('before') }],
+    [t('insertParagraphBelow'), () => { insertParagraphNearSelection('after') }],
+  ]
+  appendSubmenu(surface, t('slashMenu'), 'plus', insertActions, true)
 }
 
 function showEditorContextMenu(event: MouseEvent): void {
@@ -894,13 +969,13 @@ function showEditorContextMenu(event: MouseEvent): void {
   surface.replaceChildren()
   appendClipboardGrid(surface, hasSelection)
   const grid = document.createElement('div'); grid.className = 'selection-format-grid'
-  const formats: Array<[string, string]> = [
-    ['format.strong', 'B'], ['format.emphasis', 'I'], ['format.inline-code', '</>'], ['format.link', '⌁'],
-    ['format.quote', '❞'], ['format.ordered-list', '1·'], ['format.unordered-list', '•'], ['format.task-list', '✓'],
+  const formats: Array<[string, IconName]> = [
+    ['format.strong', 'bold'], ['format.emphasis', 'italic'], ['format.inline-code', 'code'], ['format.link', 'link'],
+    ['format.quote', 'quote'], ['format.ordered-list', 'listOrdered'], ['format.unordered-list', 'list'], ['format.task-list', 'task'],
   ]
-  for (const [id, glyph] of formats) {
+  for (const [id, icon] of formats) {
     const command = commands.get(id); if (!command) continue
-    const item = document.createElement('button'); item.type = 'button'; item.className = 'selection-format-icon'; item.textContent = glyph; item.title = command.label(); item.setAttribute('aria-label', command.label())
+    const item = document.createElement('button'); item.type = 'button'; item.className = 'selection-format-icon'; setButtonIcon(item, icon, 15); item.title = command.label(); item.setAttribute('aria-label', command.label())
     item.addEventListener('click', () => { hideMenus(); commands.execute(id) }); grid.append(item)
   }
   const rows = document.createElement('div'); rows.className = 'selection-format-rows'
@@ -912,7 +987,7 @@ function showEditorContextMenu(event: MouseEvent): void {
     item.append(label, hint); item.addEventListener('click', () => { hideMenus(); commands.execute(id) }); rows.append(item)
   }
   surface.append(grid, rows)
-  if (hasSelection) appendMenuRow(surface, t('codexSendSelection'), () => {
+  if (hasSelection) appendMenuRow(rows, t('codexSendSelection'), () => {
     void sendCodexContext('selection')
   }, 'Codex')
   appendInsertMenu(surface)
@@ -924,15 +999,19 @@ function showTableContextMenu(event: MouseEvent, cell: HTMLElement): void {
   const surface = contextMenuSurface(); surface.replaceChildren()
   appendClipboardGrid(surface, !view.state.selection.empty)
   const rows = document.createElement('div'); rows.className = 'selection-format-rows table-context-rows'
-  appendMenuRow(rows, t('insertRowAbove'), () => { runTableCommand('add-row-before', cell) })
-  appendMenuRow(rows, t('insertRowBelow'), () => { runTableCommand('add-row-after', cell) })
-  appendMenuRow(rows, t('deleteCurrentRow'), () => { runTableCommand('delete-row', cell) })
+  appendSubmenu(rows, t('tableRow'), 'rows', [
+    [t('insertRowAbove'), () => { runTableCommand('add-row-before', cell) }],
+    [t('insertRowBelow'), () => { runTableCommand('add-row-after', cell) }],
+    [t('deleteCurrentRow'), () => { runTableCommand('delete-row', cell) }],
+  ])
+  appendSubmenu(rows, t('tableColumn'), 'columns', [
+    [t('insertColumnLeft'), () => { runTableCommand('add-column-before', cell) }],
+    [t('insertColumnRight'), () => { runTableCommand('add-column-after', cell) }],
+    [t('deleteCurrentColumn'), () => { runTableCommand('delete-column', cell) }],
+  ])
   rows.append(document.createElement('hr'))
-  appendMenuRow(rows, t('insertColumnLeft'), () => { runTableCommand('add-column-before', cell) })
-  appendMenuRow(rows, t('insertColumnRight'), () => { runTableCommand('add-column-after', cell) })
-  appendMenuRow(rows, t('deleteCurrentColumn'), () => { runTableCommand('delete-column', cell) })
-  rows.append(document.createElement('hr'))
-  appendMenuRow(rows, t('deleteTable'), () => { runTableCommand('delete-table', cell) })
+  const deleteRow = appendMenuRow(rows, t('deleteTable'), () => { runTableCommand('delete-table', cell) })
+  deleteRow.classList.add('danger')
   surface.append(rows)
   showMenu(surface, event.clientX, event.clientY)
 }
