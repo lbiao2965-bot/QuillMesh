@@ -35,6 +35,7 @@ import { buildExportDocument } from './export-document'
 import { markdownSectionAtLine, sourceSelectionContext } from './codex-context'
 import { iconSvg, setButtonIcon, type IconName } from './icons'
 import type { CodexSendKind, DiskRevision, DocumentPayload, ExportFormat, RecentFile } from '../preload/index'
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '../shared/settings'
 import './themes/base.css'
 
 type EditorMode = 'wysiwyg' | 'source' | 'split'
@@ -73,6 +74,7 @@ let splitRenderFrame: number | null = null
 let splitRenderDocumentId: string | null = null
 let sourceSyncing = false
 let autosaveEnabled = localStorage.getItem('colamd-autosave') === '1'
+let appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, autosave: autosaveEnabled, theme: loadSavedTheme() }
 let manualPanelHidden = localStorage.getItem('file-panel-hidden') === '1'
 let activePanelTab: SidePanelTab = (localStorage.getItem('file-panel-tab') as SidePanelTab) || 'files'
 let outlinePanel: OutlinePanel | null = null
@@ -106,7 +108,99 @@ const conflictDiffEl = () => document.getElementById('conflict-diff') as HTMLEle
 const codexButtonEl = () => document.getElementById('codex-btn') as HTMLButtonElement
 const codexMenuEl = () => document.getElementById('codex-menu') as HTMLElement
 const codexStatusEl = () => document.getElementById('codex-connection-status') as HTMLElement
+const fullscreenBarEl = () => document.getElementById('fullscreen-menu-bar') as HTMLElement
+const fullscreenViewButtonEl = () => document.getElementById('fullscreen-view-btn') as HTMLButtonElement
+const fullscreenViewMenuEl = () => document.getElementById('fullscreen-view-menu') as HTMLElement
+const settingsOverlayEl = () => document.getElementById('settings-overlay') as HTMLElement
 const activeSession = (): DocumentSession | null => activeDocumentId ? sessions.get(activeDocumentId) ?? null : null
+
+const editorFontValues: Record<AppSettings['editorFont'], string> = {
+  theme: '',
+  sans: "var(--font-ui)",
+  serif: "'LXGW WenKai', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif",
+  mono: "var(--font-mono)",
+}
+const contentWidths: Record<AppSettings['contentWidth'], string> = { compact: '680px', comfortable: '780px', wide: '980px', fluid: 'none' }
+
+function applyAppSettings(next: AppSettings): void {
+  appSettings = next
+  autosaveEnabled = next.autosave
+  localStorage.setItem('colamd-autosave', autosaveEnabled ? '1' : '0')
+  document.body.classList.toggle('codex-enabled', next.codexEnabled)
+  document.body.classList.toggle('show-status-bar', next.statusBar)
+  codexButtonEl().hidden = !next.codexEnabled
+  codexStatusEl().hidden = !next.codexEnabled
+  if (!next.codexEnabled) {
+    codexMenuEl().hidden = true
+    codexButtonEl().setAttribute('aria-expanded', 'false')
+    ;(document.getElementById('codex-toast') as HTMLElement).hidden = true
+    dismissActiveCodexProposal?.('rejected')
+  }
+  document.documentElement.style.setProperty('--editor-font-size', `${next.fontSize}px`)
+  document.documentElement.style.setProperty('--editor-line-height', String(next.lineHeight))
+  document.documentElement.style.setProperty('--editor-content-width', contentWidths[next.contentWidth])
+  if (next.editorFont === 'theme') document.body.removeAttribute('data-editor-font')
+  else document.body.setAttribute('data-editor-font', next.editorFont)
+  document.documentElement.style.setProperty('--editor-font-override', editorFontValues[next.editorFont] || 'inherit')
+  renderAutosave()
+  syncSettingsControls()
+  window.requestAnimationFrame(() => window.dispatchEvent(new Event('colamd-layout-changed')))
+}
+
+async function applyThemeSetting(theme: string): Promise<void> {
+  if (theme.startsWith('custom:')) {
+    const css = await window.electronAPI.loadThemeCSS(theme.slice(7))
+    applyTheme(theme, css ?? undefined)
+  } else applyTheme(theme)
+}
+
+function syncSettingsControls(): void {
+  const controls = {
+    theme: document.getElementById('settings-theme') as HTMLSelectElement | null,
+    font: document.getElementById('settings-font') as HTMLSelectElement | null,
+    fontSize: document.getElementById('settings-font-size') as HTMLInputElement | null,
+    lineHeight: document.getElementById('settings-line-height') as HTMLInputElement | null,
+    width: document.getElementById('settings-width') as HTMLSelectElement | null,
+    autosave: document.getElementById('settings-autosave') as HTMLInputElement | null,
+    statusBar: document.getElementById('settings-statusbar') as HTMLInputElement | null,
+    codex: document.getElementById('settings-codex') as HTMLInputElement | null,
+  }
+  if (!controls.theme) return
+  if (![...controls.theme.options].some((option) => option.value === appSettings.theme)) {
+    const option = new Option(appSettings.theme.replace(/^custom:/, ''), appSettings.theme)
+    controls.theme.add(option)
+  }
+  controls.theme.value = appSettings.theme
+  controls.font!.value = appSettings.editorFont
+  controls.fontSize!.value = String(appSettings.fontSize)
+  controls.lineHeight!.value = String(appSettings.lineHeight)
+  controls.width!.value = appSettings.contentWidth
+  controls.autosave!.checked = appSettings.autosave
+  controls.statusBar!.checked = appSettings.statusBar
+  controls.codex!.checked = appSettings.codexEnabled
+  ;(document.getElementById('settings-font-size-value') as HTMLOutputElement).value = `${appSettings.fontSize} px`
+  ;(document.getElementById('settings-line-height-value') as HTMLOutputElement).value = appSettings.lineHeight.toFixed(2)
+}
+
+function openSettings(): void { hideMenus(); syncSettingsControls(); settingsOverlayEl().hidden = false; (document.getElementById('settings-theme') as HTMLSelectElement).focus() }
+function closeSettings(): void { settingsOverlayEl().hidden = true }
+async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
+  const next = await window.electronAPI.updateAppSettings(patch)
+  applyAppSettings(next)
+  if (patch.theme) await applyThemeSetting(next.theme)
+  if (patch.autosave === true) for (const session of sessions.values()) scheduleAutosave(session)
+  if (patch.autosave === false) for (const session of sessions.values()) { if (session.autosaveTimer) clearTimeout(session.autosaveTimer); session.autosaveTimer = null }
+}
+
+function setFullscreenUi(enabled: boolean): void {
+  document.body.classList.toggle('fullscreen-mode', enabled)
+  fullscreenBarEl().hidden = !enabled
+  if (!enabled) {
+    fullscreenViewMenuEl().hidden = true
+    fullscreenViewButtonEl().setAttribute('aria-expanded', 'false')
+  }
+  window.requestAnimationFrame(() => window.dispatchEvent(new Event('colamd-layout-changed')))
+}
 
 function updateCodexChrome(): void {
   const button = codexButtonEl()
@@ -295,6 +389,7 @@ function bridgeProposal(requestId: string, payload: Record<string, unknown>): vo
 }
 
 function handleCodexBridgeRequest(request: import('../preload/index').CodexBridgeRequest): void {
+  if (!appSettings.codexEnabled) { window.electronAPI.respondCodexBridge(request.requestId, null, 'Codex integration is disabled in QuillMesh settings.'); return }
   const { requestId, action, payload } = request
   try {
     if (action === 'proposal') { bridgeProposal(requestId, payload); return }
@@ -825,8 +920,9 @@ function showMenu(element: HTMLElement, x: number, y: number): void {
   element.style.top = `${Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin))}px`
 }
 function hideMenus(): void {
-  for (const id of ['command-palette', 'slash-command-menu', 'selection-command-menu', 'image-resource-menu', 'link-preview', 'codex-menu']) document.getElementById(id)?.setAttribute('hidden', '')
+  for (const id of ['command-palette', 'slash-command-menu', 'selection-command-menu', 'image-resource-menu', 'link-preview', 'codex-menu', 'fullscreen-view-menu']) document.getElementById(id)?.setAttribute('hidden', '')
   codexButtonEl().setAttribute('aria-expanded', 'false')
+  fullscreenViewButtonEl().setAttribute('aria-expanded', 'false')
 }
 
 const commands = new CommandRegistry()
@@ -850,9 +946,10 @@ function registerCommands(search: SearchPanel): void {
   commands.register({ id: 'view.filePanel', label: () => t('toggleFileList'), execute: () => { manualPanelHidden = !manualPanelHidden; localStorage.setItem('file-panel-hidden', manualPanelHidden ? '1' : '0'); updatePanelVisibility() } })
   commands.register({ id: 'view.source', label: () => t('sourceMode'), execute: toggleSourceMode })
   commands.register({ id: 'view.split', label: () => t('splitView'), execute: toggleSplitMode })
-  commands.register({ id: 'codex.sendSelection', label: () => t('codexSendSelection'), keywords: () => ['Codex', 'AI', 'selection'], enabled: () => Boolean(activeSession()), execute: () => sendCodexContext('selection') })
-  commands.register({ id: 'codex.sendSection', label: () => t('codexSendSection'), keywords: () => ['Codex', 'AI', 'section', 'heading'], enabled: () => Boolean(activeSession()), execute: () => sendCodexContext('section') })
-  commands.register({ id: 'codex.checkDocument', label: () => t('codexCheckDocument'), keywords: () => ['Codex', 'AI', 'Markdown', 'check'], enabled: () => Boolean(activeSession()), execute: () => sendCodexContext('document') })
+  commands.register({ id: 'app.settings', label: () => t('settings'), keywords: () => ['preferences', 'font', 'theme', 'Codex'], execute: openSettings })
+  commands.register({ id: 'codex.sendSelection', label: () => t('codexSendSelection'), keywords: () => ['Codex', 'AI', 'selection'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('selection') })
+  commands.register({ id: 'codex.sendSection', label: () => t('codexSendSection'), keywords: () => ['Codex', 'AI', 'section', 'heading'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('section') })
+  commands.register({ id: 'codex.checkDocument', label: () => t('codexCheckDocument'), keywords: () => ['Codex', 'AI', 'Markdown', 'check'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('document') })
   commands.register({ id: 'help.demo', label: () => t('featureDemo'), execute: async () => { await window.electronAPI.openFeatureDemo() } })
 }
 
@@ -987,7 +1084,7 @@ function showEditorContextMenu(event: MouseEvent): void {
     item.append(label, hint); item.addEventListener('click', () => { hideMenus(); commands.execute(id) }); rows.append(item)
   }
   surface.append(grid, rows)
-  if (hasSelection) appendMenuRow(rows, t('codexSendSelection'), () => {
+  if (appSettings.codexEnabled && hasSelection) appendMenuRow(rows, t('codexSendSelection'), () => {
     void sendCodexContext('selection')
   }, 'Codex')
   appendInsertMenu(surface)
@@ -1139,13 +1236,22 @@ async function applyExternalDocumentChange(data: { documentId: string; content: 
 
 async function init(): Promise<void> {
   const api = window.electronAPI
+  api.onFullscreenChanged(setFullscreenUi)
+  setFullscreenUi(await api.getFullscreenState())
   api.onCodexBridgeRequest(handleCodexBridgeRequest)
   api.onCodexConnectionStatus(setCodexConnected)
   setRendererLanguage(await api.getLanguage())
+  appSettings = await api.getAppSettings()
+  if (localStorage.getItem('quillmesh-settings-migrated') !== '1') {
+    appSettings = await api.updateAppSettings({ theme: loadSavedTheme(), autosave: localStorage.getItem('colamd-autosave') === '1' })
+    localStorage.setItem('quillmesh-settings-migrated', '1')
+  }
+  applyAppSettings(appSettings)
   refreshStaticLabels()
   setCodexConnected(await api.getCodexConnectionStatus())
   api.onLanguageChanged((language) => { setRendererLanguage(language); refreshStaticLabels(); renderTabs(); renderRecent(); renderConflict(); scheduleStatus(); scheduleTasks(); updateCodexChrome(); if (!codexMenuEl().hidden) renderCodexMenu() })
-  const theme = loadSavedTheme(); applyTheme(theme); if (theme.startsWith('custom:')) { const css = await api.loadThemeCSS(theme.slice(7)); if (css) applyTheme(theme, css) }
+  api.onAppSettingsChanged((settings) => { applyAppSettings(settings); void applyThemeSetting(settings.theme) })
+  await applyThemeSetting(appSettings.theme)
   const recordWysiwygChange = (markdown: string): void => {
     const session = activeSession()
     if (!session) return
@@ -1185,24 +1291,40 @@ async function init(): Promise<void> {
   setImagePasteHandler(pasteImage)
   outlinePanel = new OutlinePanel(editorEl(), document.getElementById('outline-list') as HTMLElement, document.getElementById('outline-empty') as HTMLElement, moveHeadingSection, revealHeadingFromOutline)
   const search = new SearchPanel(); registerCommands(search)
-  const options = await api.getViewOptions(); document.body.classList.toggle('focus-mode', options.focusMode); document.body.classList.toggle('typewriter-mode', options.typewriterMode); document.body.classList.toggle('show-status-bar', options.statusBar); document.body.classList.toggle('show-equation-numbers', options.equationNumbering)
+  const options = await api.getViewOptions(); document.body.classList.toggle('focus-mode', options.focusMode); document.body.classList.toggle('typewriter-mode', options.typewriterMode); document.body.classList.toggle('show-equation-numbers', options.equationNumbering)
   ;(document.getElementById('autosave-btn') as HTMLButtonElement).addEventListener('click', () => {
-    autosaveEnabled = !autosaveEnabled
-    localStorage.setItem('colamd-autosave', autosaveEnabled ? '1' : '0')
-    if (autosaveEnabled) for (const session of sessions.values()) scheduleAutosave(session)
-    else for (const session of sessions.values()) {
-      if (session.autosaveTimer) clearTimeout(session.autosaveTimer)
-      session.autosaveTimer = null
-    }
-    renderAutosave()
+    void updateSettings({ autosave: !appSettings.autosave })
   })
   ;(document.getElementById('split-view-btn') as HTMLButtonElement).addEventListener('click', toggleSplitMode); renderAutosave()
   ;(document.getElementById('empty-open-document') as HTMLButtonElement).addEventListener('click', () => { void api.openFile() })
   ;(document.getElementById('empty-new-document') as HTMLButtonElement).addEventListener('click', () => { void api.newDocument() })
   ;(document.getElementById('welcome-recent-list') as HTMLElement).addEventListener('click', (event) => { const path = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]')?.dataset.path; if (path) void api.openFilePath(path) })
   codexButtonEl().addEventListener('click', (event) => { event.stopPropagation(); toggleCodexMenu() })
+  ;(document.getElementById('settings-btn') as HTMLButtonElement).addEventListener('click', openSettings)
+  ;(document.getElementById('welcome-settings-btn') as HTMLButtonElement).addEventListener('click', openSettings)
+  ;(document.getElementById('settings-close') as HTMLButtonElement).addEventListener('click', closeSettings)
+  settingsOverlayEl().addEventListener('mousedown', (event) => { if (event.target === settingsOverlayEl()) closeSettings() })
+  ;(document.getElementById('settings-theme') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ theme: (event.currentTarget as HTMLSelectElement).value }) })
+  ;(document.getElementById('settings-font') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ editorFont: (event.currentTarget as HTMLSelectElement).value as AppSettings['editorFont'] }) })
+  ;(document.getElementById('settings-width') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ contentWidth: (event.currentTarget as HTMLSelectElement).value as AppSettings['contentWidth'] }) })
+  const fontSizeControl = document.getElementById('settings-font-size') as HTMLInputElement
+  fontSizeControl.addEventListener('input', () => { applyAppSettings({ ...appSettings, fontSize: Number(fontSizeControl.value) }) })
+  fontSizeControl.addEventListener('change', () => { void updateSettings({ fontSize: Number(fontSizeControl.value) }) })
+  const lineHeightControl = document.getElementById('settings-line-height') as HTMLInputElement
+  lineHeightControl.addEventListener('input', () => { applyAppSettings({ ...appSettings, lineHeight: Number(lineHeightControl.value) }) })
+  lineHeightControl.addEventListener('change', () => { void updateSettings({ lineHeight: Number(lineHeightControl.value) }) })
+  ;(document.getElementById('settings-autosave') as HTMLInputElement).addEventListener('change', (event) => { void updateSettings({ autosave: (event.currentTarget as HTMLInputElement).checked }) })
+  ;(document.getElementById('settings-statusbar') as HTMLInputElement).addEventListener('change', (event) => { void updateSettings({ statusBar: (event.currentTarget as HTMLInputElement).checked }) })
+  ;(document.getElementById('settings-codex') as HTMLInputElement).addEventListener('change', (event) => { void updateSettings({ codexEnabled: (event.currentTarget as HTMLInputElement).checked }) })
   tabsEl().addEventListener('click', (event) => { const tab = (event.target as HTMLElement).closest<HTMLButtonElement>('.document-tab'); if (!tab?.dataset.documentId) return; if ((event.target as HTMLElement).closest('.tab-close')) void requestCloseTab(tab.dataset.documentId); else void api.activateDocument(tab.dataset.documentId) })
   document.getElementById('file-toggle-btn')?.addEventListener('click', () => commands.execute('view.filePanel'))
+  fullscreenViewButtonEl().addEventListener('click', (event) => {
+    event.stopPropagation()
+    const menu = fullscreenViewMenuEl()
+    menu.hidden = !menu.hidden
+    fullscreenViewButtonEl().setAttribute('aria-expanded', String(!menu.hidden))
+  })
+  for (const id of ['fullscreen-menu-exit', 'fullscreen-exit-btn']) document.getElementById(id)?.addEventListener('click', () => api.exitFullscreen())
   for (const tab of ['files', 'outline', 'tasks'] as SidePanelTab[]) document.getElementById(`${tab}-tab`)?.addEventListener('click', () => setPanel(tab))
   setPanel(activePanelTab)
   fileListEl().addEventListener('click', (event) => { const path = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]')?.dataset.path; const session = activeSession(); if (path && session) void api.openSibling(session.documentId, path) })
@@ -1248,7 +1370,14 @@ async function init(): Promise<void> {
   })
   window.addEventListener('colamd-toggle-heading-collapse', (event) => { const session = activeSession(); const key = (event as CustomEvent<string>).detail; if (!session || !key) return; session.collapsedHeadings.has(key) ? session.collapsedHeadings.delete(key) : session.collapsedHeadings.add(key); applyHeadingCollapse(session.collapsedHeadings) })
   window.addEventListener('colamd-toggle-code-wrap', (event) => { const session = activeSession(); const key = (event as CustomEvent<string>).detail; if (!session || !key) return; session.codeWrap.has(key) ? session.codeWrap.delete(key) : session.codeWrap.add(key); applyCodeWrap(session.codeWrap) })
-  document.addEventListener('keydown', (event) => { if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); openPalette() } else if (event.key === 'Escape') hideMenus() })
+  document.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); openPalette() }
+    else if (event.key === 'Escape') {
+      if (!settingsOverlayEl().hidden) { event.preventDefault(); closeSettings(); return }
+      if (document.body.classList.contains('fullscreen-mode')) { event.preventDefault(); api.exitFullscreen() }
+      hideMenus()
+    }
+  })
   document.addEventListener('click', (event) => { if (!(event.target as HTMLElement).closest('.command-surface,.selection-format-menu,.titlebar-text-btn,.titlebar-recent-btn,.titlebar-codex-btn,.popover-menu,.link-preview')) hideMenus() })
   recentButtonEl().addEventListener('click', () => { const menu = recentMenuEl(); if (menu.hidden) { renderRecent(); showMenu(menu, recentButtonEl().getBoundingClientRect().left, recentButtonEl().getBoundingClientRect().bottom + 4) } else menu.hidden = true })
   recentMenuEl().addEventListener('click', (event) => { const path = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]')?.dataset.path; if (path) void api.openFilePath(path) })
@@ -1297,7 +1426,7 @@ async function init(): Promise<void> {
   api.onSaveBeforeClose(() => { void saveAllBeforeWindowClose() })
   api.onAgentActivity((state) => { const dot = document.getElementById('agent-dot'); if (dot) dot.className = state === 'idle' ? '' : state })
   api.onSiblingsChanged((data) => { if (data.documentId === activeDocumentId) void refreshSiblings() })
-  api.onSetTheme((value) => applyTheme(value)); api.onSetCustomCSS((css) => applyTheme(loadSavedTheme(), css)); api.onMenuImportTheme(async () => { const value = await api.loadCustomTheme(); if (value) applyTheme(`custom:${value.name}`, value.css) })
+  api.onSetTheme((value) => { void updateSettings({ theme: value }) }); api.onSetCustomCSS((css) => applyTheme(loadSavedTheme(), css)); api.onMenuImportTheme(async () => { const value = await api.loadCustomTheme(); if (value) { applyTheme(`custom:${value.name}`, value.css); await updateSettings({ theme: `custom:${value.name}` }) } })
   api.onToggleFocusMode((value) => document.body.classList.toggle('focus-mode', value)); api.onToggleTypewriterMode((value) => document.body.classList.toggle('typewriter-mode', value)); api.onToggleStatusBar((value) => document.body.classList.toggle('show-status-bar', value)); api.onToggleEquationNumbering((value) => document.body.classList.toggle('show-equation-numbers', value))
   document.addEventListener('dragover', (event) => event.preventDefault()); document.addEventListener('drop', (event) => { event.preventDefault(); const file = event.dataTransfer?.files[0]; const path = file ? api.getPathForFile(file) : ''; if (path) void api.openFilePath(path) })
   api.rendererReady()
@@ -1306,6 +1435,31 @@ async function init(): Promise<void> {
 function renderAutosave(): void { const button = document.getElementById('autosave-btn') as HTMLButtonElement; button.textContent = autosaveEnabled ? t('autosaveOn') : t('autosaveOff'); button.setAttribute('aria-pressed', String(autosaveEnabled)) }
 function refreshStaticLabels(): void {
   ;(document.getElementById('codex-btn-label') as HTMLElement).textContent = t('codex')
+  const settingsButton = document.getElementById('settings-btn') as HTMLButtonElement
+  settingsButton.title = t('settings'); settingsButton.setAttribute('aria-label', t('settings'))
+  const welcomeSettingsButton = document.getElementById('welcome-settings-btn') as HTMLButtonElement
+  welcomeSettingsButton.title = t('settings'); welcomeSettingsButton.setAttribute('aria-label', t('settings'))
+  ;(document.getElementById('settings-title') as HTMLElement).textContent = t('settings')
+  ;(document.getElementById('settings-description') as HTMLElement).textContent = t('settingsDescription')
+  ;(document.getElementById('settings-appearance-title') as HTMLElement).textContent = t('appearance')
+  ;(document.getElementById('settings-editor-title') as HTMLElement).textContent = t('editorSettings')
+  ;(document.getElementById('settings-integrations-title') as HTMLElement).textContent = t('integrations')
+  ;(document.getElementById('settings-theme-label') as HTMLElement).textContent = t('theme')
+  ;(document.getElementById('settings-font-label') as HTMLElement).textContent = t('editorFont')
+  ;(document.getElementById('settings-font-size-label') as HTMLElement).textContent = t('fontSize')
+  ;(document.getElementById('settings-line-height-label') as HTMLElement).textContent = t('lineSpacing')
+  ;(document.getElementById('settings-width-label') as HTMLElement).textContent = t('pageWidth')
+  ;(document.getElementById('settings-autosave-label') as HTMLElement).textContent = t('autosaveOn').replace(/[:：].*$/, '')
+  ;(document.getElementById('settings-autosave-description') as HTMLElement).textContent = t('autosaveDescription')
+  ;(document.getElementById('settings-statusbar-label') as HTMLElement).textContent = t('showStatusBar')
+  ;(document.getElementById('settings-statusbar-description') as HTMLElement).textContent = t('statusBarDescription')
+  ;(document.getElementById('settings-codex-label') as HTMLElement).textContent = t('codexIntegration')
+  ;(document.getElementById('settings-codex-description') as HTMLElement).textContent = t('codexIntegrationDescription')
+  ;(document.getElementById('settings-codex-note') as HTMLElement).textContent = t('codexOffByDefault')
+  const optionLabels: Record<string, string> = { elegant: t('elegant'), light: t('light'), dark: t('dark'), newsprint: t('newsprint'), theme: t('followTheme'), sans: t('sansSerif'), serif: t('serif'), mono: t('monospace'), compact: t('compactWidth'), comfortable: t('comfortableWidth'), wide: t('wideWidth'), fluid: t('fluidWidth') }
+  for (const option of document.querySelectorAll<HTMLOptionElement>('#settings-dialog option')) if (optionLabels[option.value]) option.textContent = optionLabels[option.value]
+  const closeButton = document.getElementById('settings-close') as HTMLButtonElement
+  closeButton.title = t('close'); closeButton.setAttribute('aria-label', t('close'))
   recentButtonEl().title = t('recentFiles')
   recentButtonEl().setAttribute('aria-label', t('recentFiles'))
   ;(document.getElementById('tasks-tab') as HTMLElement).textContent = t('tasks')
@@ -1320,6 +1474,10 @@ function refreshStaticLabels(): void {
   ;(document.getElementById('conflict-compare-btn') as HTMLElement).textContent = t('compareVersions')
   ;(document.getElementById('conflict-keep-btn') as HTMLElement).textContent = t('keepMine')
   ;(document.getElementById('conflict-use-external-btn') as HTMLElement).textContent = t('useExternal')
+  ;(document.getElementById('fullscreen-view-label') as HTMLElement).textContent = t('view')
+  ;(document.getElementById('fullscreen-menu-exit-label') as HTMLElement).textContent = t('exitFullscreen')
+  ;(document.getElementById('fullscreen-exit-hint') as HTMLElement).textContent = t('fullscreenExitHint')
+  ;(document.getElementById('fullscreen-exit-btn') as HTMLElement).textContent = t('exitFullscreen')
   updateCodexChrome()
   renderWelcomeRecent()
   renderAutosave()

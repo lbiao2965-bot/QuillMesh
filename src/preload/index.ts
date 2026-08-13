@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { AppLanguage } from '../shared/i18n'
+import type { AppSettings } from '../shared/settings'
 
 export interface SiblingFile { name: string; path: string }
 export interface DiskRevision { value: string; mtimeMs: number; size: number }
@@ -14,7 +15,12 @@ export interface CodexSendPayload { kind: CodexSendKind; path: string | null; di
 
 export interface ElectronAPI {
   getLanguage: () => Promise<AppLanguage>
+  getAppSettings: () => Promise<AppSettings>
+  updateAppSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
   getViewOptions: () => Promise<{ focusMode: boolean; typewriterMode: boolean; statusBar: boolean; equationNumbering: boolean }>
+  getFullscreenState: () => Promise<boolean>
+  toggleFullscreen: () => void
+  exitFullscreen: () => void
   rendererReady: () => void
   getRecentFiles: () => Promise<RecentFile[]>
   newDocument: () => Promise<DocumentPayload | null>
@@ -63,7 +69,9 @@ export interface ElectronAPI {
   onToggleTypewriterMode: (callback: (enabled: boolean) => void) => void
   onToggleStatusBar: (callback: (enabled: boolean) => void) => void
   onToggleEquationNumbering: (callback: (enabled: boolean) => void) => void
+  onFullscreenChanged: (callback: (enabled: boolean) => void) => void
   onLanguageChanged: (callback: (language: AppLanguage) => void) => void
+  onAppSettingsChanged: (callback: (settings: AppSettings) => void) => void
   onCodexConnectionStatus: (callback: (connected: boolean) => void) => void
   onCodexBridgeRequest: (callback: (request: CodexBridgeRequest) => void) => void
   respondCodexBridge: (requestId: string, result: unknown, error?: string) => void
@@ -73,7 +81,12 @@ let legacyDocumentId: string | null = null
 
 const api: ElectronAPI = {
   getLanguage: () => ipcRenderer.invoke('get-language'),
+  getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
+  updateAppSettings: (patch) => ipcRenderer.invoke('update-app-settings', patch),
   getViewOptions: () => ipcRenderer.invoke('get-view-options'),
+  getFullscreenState: () => ipcRenderer.invoke('get-fullscreen-state'),
+  toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),
+  exitFullscreen: () => ipcRenderer.send('exit-fullscreen'),
   rendererReady: () => ipcRenderer.send('renderer-ready'),
   getRecentFiles: () => ipcRenderer.invoke('get-recent-files'),
   newDocument: () => ipcRenderer.invoke('new-document'),
@@ -124,7 +137,9 @@ const api: ElectronAPI = {
   onToggleTypewriterMode: (callback) => { ipcRenderer.on('toggle-typewriter-mode', (_event, enabled) => callback(Boolean(enabled))) },
   onToggleStatusBar: (callback) => { ipcRenderer.on('toggle-status-bar', (_event, enabled) => callback(Boolean(enabled))) },
   onToggleEquationNumbering: (callback) => { ipcRenderer.on('toggle-equation-numbering', (_event, enabled) => callback(Boolean(enabled))) },
+  onFullscreenChanged: (callback) => { ipcRenderer.on('fullscreen-changed', (_event, enabled) => callback(Boolean(enabled))) },
   onLanguageChanged: (callback) => { ipcRenderer.on('language-changed', (_event, language) => callback(language as AppLanguage)) },
+  onAppSettingsChanged: (callback) => { ipcRenderer.on('app-settings-changed', (_event, settings) => callback(settings as AppSettings)) },
   onCodexConnectionStatus: (callback) => { ipcRenderer.on('codex-connection-status', (_event, connected) => callback(Boolean(connected))) },
   onCodexBridgeRequest: (callback) => { ipcRenderer.on('codex-bridge-request', (_event, request) => callback(request as CodexBridgeRequest)) },
   respondCodexBridge: (requestId, result, error) => ipcRenderer.send('codex-bridge-response', { requestId, result, error }),

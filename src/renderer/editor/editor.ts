@@ -706,6 +706,7 @@ function installImageResizeControls(root: HTMLElement): void {
     const handle = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('.colamd-image-resize-handle')
     if (!handle || !activeImage) return
     event.preventDefault(); event.stopPropagation(); dragging = true
+    frame.classList.add('dragging')
     const image = activeImage
     const startX = event.clientX
     const startY = event.clientY
@@ -734,6 +735,7 @@ function installImageResizeControls(root: HTMLElement): void {
       handle.removeEventListener('pointerup', finish)
       handle.removeEventListener('pointercancel', finish)
       dragging = false
+      frame.classList.remove('dragging')
       const width = image.getBoundingClientRect().width
       if (!setImageWidthAt(image, width)) image.style.removeProperty('width')
       frame.hidden = true; activeImage = null
@@ -775,11 +777,18 @@ function installTableAndCodeTools(root: HTMLElement): void {
   const toolsDivider = document.createElement('span'); toolsDivider.className = 'colamd-table-tools-divider'
   tableTools.append(tableAlign, toolsDivider, tableActions); document.body.append(tableTools)
 
-  const copyCode = document.createElement('button'); copyCode.type = 'button'; copyCode.className = 'colamd-code-copy'; copyCode.textContent = t('copyCode'); copyCode.hidden = true
+  const copyCode = document.createElement('button'); copyCode.type = 'button'; copyCode.className = 'colamd-code-copy'; setButtonIcon(copyCode, 'copy', 13); copyCode.title = t('copyCode'); copyCode.setAttribute('aria-label', t('copyCode'))
   const codeOptions = document.createElement('div'); codeOptions.className = 'colamd-code-options'; codeOptions.hidden = true
   const language = document.createElement('select'); language.setAttribute('aria-label', t('languageLabel'))
-  const wrap = document.createElement('button'); wrap.type = 'button'; wrap.textContent = t('wrapCode')
-  codeOptions.append(language, wrap); document.body.append(copyCode, codeOptions)
+  const wrap = document.createElement('button'); wrap.type = 'button'; setButtonIcon(wrap, 'wrap', 13)
+  const syncWrapLabel = (pre: HTMLElement): void => {
+    const wrapped = pre.classList.contains('colamd-code-wrap')
+    const label = wrapped ? t('unwrapCode') : t('wrapCode')
+    wrap.title = label; wrap.setAttribute('aria-label', label); wrap.classList.toggle('active', wrapped)
+  }
+  // One compact bar in the block corner: language, wrap and copy share a row
+  // instead of stacking as separate floating cards over the code.
+  codeOptions.append(language, wrap, copyCode); document.body.append(codeOptions)
   let activePre: HTMLElement | null = null
 
   const positionTable = (): void => {
@@ -790,10 +799,10 @@ function installTableAndCodeTools(root: HTMLElement): void {
     tableTools.style.top = `${Math.max(54, rect.top - tableTools.offsetHeight - 6)}px`
   }
   const positionCode = (): void => {
-    if (!activePre?.isConnected) { copyCode.hidden = true; codeOptions.hidden = true; return }
+    if (!activePre?.isConnected) { codeOptions.hidden = true; return }
     const rect = activePre.getBoundingClientRect()
-    copyCode.style.left = `${Math.max(8, rect.right - copyCode.offsetWidth - 8)}px`; copyCode.style.top = `${Math.max(56, rect.top + 8)}px`
-    codeOptions.style.left = `${Math.max(8, rect.right - codeOptions.offsetWidth - 8)}px`; codeOptions.style.top = `${Math.min(window.innerHeight - codeOptions.offsetHeight - 8, rect.bottom - codeOptions.offsetHeight - 8)}px`
+    codeOptions.style.left = `${Math.max(8, rect.right - codeOptions.offsetWidth - 8)}px`
+    codeOptions.style.top = `${Math.max(56, rect.top + 6)}px`
   }
   const fillLanguages = (current: string): void => {
     language.replaceChildren()
@@ -810,7 +819,7 @@ function installTableAndCodeTools(root: HTMLElement): void {
     tableTools.hidden = false
     positionTable()
   }
-  const showCode = (pre: HTMLElement): void => { activePre = pre; fillLanguages(codeBlockLanguageAt(pre)); wrap.textContent = pre.classList.contains('colamd-code-wrap') ? t('unwrapCode') : t('wrapCode'); copyCode.hidden = false; codeOptions.hidden = false; positionCode() }
+  const showCode = (pre: HTMLElement): void => { activePre = pre; fillLanguages(codeBlockLanguageAt(pre)); syncWrapLabel(pre); copyCode.hidden = false; codeOptions.hidden = false; positionCode() }
 
   root.addEventListener('mousemove', (event) => {
     const target = event.target as HTMLElement | null
@@ -822,13 +831,20 @@ function installTableAndCodeTools(root: HTMLElement): void {
   document.addEventListener('pointerdown', (event) => {
     const target = event.target as HTMLElement | null
     if (!target?.closest('.colamd-floating-table-tools') && !target?.closest('#editor table')) { tableTools.hidden = true; activeTable = null; activeCell = null }
-    if (!target?.closest('.colamd-code-copy,.colamd-code-options') && !target?.closest('#editor pre')) { copyCode.hidden = true; codeOptions.hidden = true; activePre = null }
+    if (!target?.closest('.colamd-code-copy,.colamd-code-options') && !target?.closest('#editor pre')) { codeOptions.hidden = true; activePre = null }
   }, true)
   root.addEventListener('scroll', () => { positionTable(); positionCode() }, { passive: true })
   window.addEventListener('resize', () => { positionTable(); positionCode() }, { passive: true })
 
-  copyCode.addEventListener('click', () => { if (activePre) void navigator.clipboard?.writeText(activePre.querySelector('code')?.textContent ?? activePre.textContent ?? '') })
-  wrap.addEventListener('click', () => { if (!activePre) return; const key = codeBlockKeyAt(activePre); if (key) window.dispatchEvent(new CustomEvent('colamd-toggle-code-wrap', { detail: key })); wrap.textContent = activePre.classList.contains('colamd-code-wrap') ? t('unwrapCode') : t('wrapCode') })
+  let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+  copyCode.addEventListener('click', () => {
+    if (!activePre) return
+    void navigator.clipboard?.writeText(activePre.querySelector('code')?.textContent ?? activePre.textContent ?? '')
+    if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer)
+    setButtonIcon(copyCode, 'check', 13); copyCode.classList.add('copied')
+    copyFeedbackTimer = setTimeout(() => { setButtonIcon(copyCode, 'copy', 13); copyCode.classList.remove('copied'); copyFeedbackTimer = null }, 1200)
+  })
+  wrap.addEventListener('click', () => { if (!activePre) return; const key = codeBlockKeyAt(activePre); if (key) window.dispatchEvent(new CustomEvent('colamd-toggle-code-wrap', { detail: key })); syncWrapLabel(activePre) })
   language.addEventListener('change', () => {
     const view = getEditorView(); if (!view || !activePre) return
     try {

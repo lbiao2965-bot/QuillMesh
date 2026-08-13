@@ -28,6 +28,7 @@ const { conflictTargetToCancel, pendingConflictTarget, sameConflictTarget } = lo
 const { collapsedHeadingStep } = loadTypeScript('../src/renderer/heading-collapse.ts')
 const { isEditorPresentationAttribute, isEditorPresentationClass } = loadTypeScript('../src/renderer/export-document.ts')
 const { markdownSectionAtLine, sourceSelectionContext } = loadTypeScript('../src/renderer/codex-context.ts')
+const { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings } = loadTypeScript('../src/shared/settings.ts')
 
 const cleanA = revisionFor('# A\n', 1000, 4)
 const cleanB = revisionFor('# B\n', 1000, 4)
@@ -157,4 +158,13 @@ assert.deepEqual(sourceSelectionContext(codexMarkdown, codexMarkdown.indexOf('se
 assert.deepEqual(markdownSectionAtLine(codexMarkdown, 7), { heading: 'Detail', content: '### Detail\nmore' })
 assert.deepEqual(markdownSectionAtLine(codexMarkdown, 5), { heading: 'Work', content: '## Work\nselected text\n\n### Detail\nmore' })
 
-console.log('document-session regression: persistence, split sync, outline boundaries, and Codex context passed')
+// New installs keep the optional Codex bridge off, while persisted appearance
+// values are validated and clamped before they reach renderer CSS.
+assert.equal(normalizeAppSettings({}).codexEnabled, false)
+assert.equal(normalizeAppSettings({ codexEnabled: true }).codexEnabled, true)
+assert.equal(normalizeAppSettings({ fontSize: 99 }).fontSize, 24)
+assert.equal(normalizeAppSettings({ lineHeight: 0 }).lineHeight, 1.4)
+assert.equal(normalizeAppSettings({ editorFont: 'comic', contentWidth: 'tiny' }).editorFont, DEFAULT_APP_SETTINGS.editorFont)
+assert.deepEqual(mergeAppSettings(DEFAULT_APP_SETTINGS, { theme: 'dark', autosave: true }), { ...DEFAULT_APP_SETTINGS, theme: 'dark', autosave: true })
+
+console.log('document-session regression: persistence, settings, split sync, outline boundaries, and Codex context passed')

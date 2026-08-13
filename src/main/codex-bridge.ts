@@ -62,7 +62,10 @@ export async function startCodexBridge(statePath: string, handlers: CodexBridgeH
   await mkdir(dirname(statePath), { recursive: true })
   await writeFile(statePath, `${JSON.stringify({ version: 1, port: address.port, token, pid: process.pid, startedAt: new Date().toISOString() }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
   return async () => {
-    await new Promise<void>((resolve) => server.close(() => resolve()))
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+      server.closeAllConnections()
+    })
     await unlink(statePath).catch(() => {})
   }
 }
