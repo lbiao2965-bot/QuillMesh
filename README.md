@@ -10,7 +10,7 @@
 
 QuillMesh brings a calm, Typora-inspired WYSIWYG experience to ordinary Markdown files. It combines rich editing, document navigation, formulas, tables, images, export, and revision-safe coordination with external tools—without introducing a proprietary document format or requiring cloud storage.
 
-> Current development version: `0.2.2`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
+> Current development version: `0.2.3`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
 
 <p align="center">
   <img src="assets/主页.png" alt="QuillMesh home screen" width="900">
@@ -86,6 +86,7 @@ Open Settings from the home page, **Edit → Settings**, or `Ctrl+,`.
 - Editor font: follow the theme, sans serif, serif, or monospace.
 - Font size, line spacing, and content width.
 - Autosave and status-bar controls.
+- Windows Markdown default-app status and a direct link to the system confirmation page.
 - Optional Codex integration.
 
 Preferences are stored locally and restored on the next launch.
@@ -127,6 +128,8 @@ QuillMesh can export the active document to:
 ### Preview installers
 
 Download available Windows preview installers from [GitHub Releases](https://github.com/lbiao2965-bot/QuillMesh/releases). Preview packages may be unsigned and can trigger an operating-system security warning.
+
+The Windows installer registers QuillMesh as an available handler for `.md`, `.markdown`, `.mdown`, and `.mkd`. Windows requires an administrator-approved installation and keeps the final default-app choice under user control. After installation, open **Settings → Files → Manage default apps**, then select QuillMesh for `.md` and `.markdown`.
 
 ### Build from source
 

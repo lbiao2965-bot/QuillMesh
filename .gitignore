@@ -6,6 +6,7 @@ dist/
 
 # Packaged application artifacts
 release/
+release-*/
 release-final*/
 
 # Local scratch and exported previews

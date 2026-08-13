@@ -182,7 +182,31 @@ function syncSettingsControls(): void {
   ;(document.getElementById('settings-line-height-value') as HTMLOutputElement).value = appSettings.lineHeight.toFixed(2)
 }
 
-function openSettings(): void { hideMenus(); syncSettingsControls(); settingsOverlayEl().hidden = false; (document.getElementById('settings-theme') as HTMLSelectElement).focus() }
+async function refreshFileAssociationStatus(): Promise<void> {
+  const section = document.getElementById('settings-files-section') as HTMLElement
+  const statusElement = document.getElementById('settings-default-app-status') as HTMLElement
+  statusElement.textContent = t('checkingDefaultApp')
+  try {
+    const status = await window.electronAPI.getFileAssociationStatus()
+    section.hidden = !status.supported
+    if (!status.supported) return
+    statusElement.textContent = status.isDefault
+      ? t('defaultAppActive')
+      : status.mdDefault || status.markdownDefault
+        ? t('defaultAppPartial')
+        : t('defaultAppInactive')
+  } catch {
+    section.hidden = true
+  }
+}
+
+function openSettings(): void {
+  hideMenus()
+  syncSettingsControls()
+  settingsOverlayEl().hidden = false
+  ;(document.getElementById('settings-theme') as HTMLSelectElement).focus()
+  void refreshFileAssociationStatus()
+}
 function closeSettings(): void { settingsOverlayEl().hidden = true }
 async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
   const next = await window.electronAPI.updateAppSettings(patch)
@@ -1304,6 +1328,11 @@ async function init(): Promise<void> {
   ;(document.getElementById('welcome-settings-btn') as HTMLButtonElement).addEventListener('click', openSettings)
   ;(document.getElementById('settings-close') as HTMLButtonElement).addEventListener('click', closeSettings)
   settingsOverlayEl().addEventListener('mousedown', (event) => { if (event.target === settingsOverlayEl()) closeSettings() })
+  ;(document.getElementById('settings-default-app-btn') as HTMLButtonElement).addEventListener('click', async () => {
+    const opened = await api.openDefaultAppsSettings()
+    ;(document.getElementById('settings-default-app-note') as HTMLElement).textContent = opened ? t('defaultAppInstructions') : t('defaultAppsOpenFailed')
+  })
+  window.addEventListener('focus', () => { if (!settingsOverlayEl().hidden) void refreshFileAssociationStatus() })
   ;(document.getElementById('settings-theme') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ theme: (event.currentTarget as HTMLSelectElement).value }) })
   ;(document.getElementById('settings-font') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ editorFont: (event.currentTarget as HTMLSelectElement).value as AppSettings['editorFont'] }) })
   ;(document.getElementById('settings-width') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ contentWidth: (event.currentTarget as HTMLSelectElement).value as AppSettings['contentWidth'] }) })
@@ -1443,6 +1472,11 @@ function refreshStaticLabels(): void {
   ;(document.getElementById('settings-description') as HTMLElement).textContent = t('settingsDescription')
   ;(document.getElementById('settings-appearance-title') as HTMLElement).textContent = t('appearance')
   ;(document.getElementById('settings-editor-title') as HTMLElement).textContent = t('editorSettings')
+  ;(document.getElementById('settings-files-title') as HTMLElement).textContent = t('filesSettings')
+  ;(document.getElementById('settings-default-app-label') as HTMLElement).textContent = t('defaultMarkdownApp')
+  ;(document.getElementById('settings-default-app-status') as HTMLElement).textContent = t('checkingDefaultApp')
+  ;(document.getElementById('settings-default-app-btn') as HTMLElement).textContent = t('manageDefaultApps')
+  ;(document.getElementById('settings-default-app-note') as HTMLElement).textContent = t('defaultAppInstructions')
   ;(document.getElementById('settings-integrations-title') as HTMLElement).textContent = t('integrations')
   ;(document.getElementById('settings-theme-label') as HTMLElement).textContent = t('theme')
   ;(document.getElementById('settings-font-label') as HTMLElement).textContent = t('editorFont')
