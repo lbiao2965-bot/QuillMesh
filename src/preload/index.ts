@@ -6,6 +6,7 @@ export interface SiblingFile { name: string; path: string }
 export interface DiskRevision { value: string; mtimeMs: number; size: number }
 export interface DocumentPayload { documentId: string; path: string | null; displayName: string; content: string; revision: DiskRevision | null }
 export interface RecentFile { path: string; name: string; missing: boolean }
+export interface FileAssociationStatus { supported: boolean; isDefault: boolean; mdDefault: boolean; markdownDefault: boolean }
 export interface SaveResult { ok: boolean; cancelled?: boolean; conflict?: { content: string; revision: DiskRevision | null; deleted?: boolean; target?: string; targetKey?: string; pathChanged?: boolean }; path?: string; revision?: DiskRevision; error?: string }
 export type ExportFormat = 'pdf' | 'png' | 'html' | 'docx'
 export interface ExportDocumentPayload { title: string; html: string }
@@ -17,6 +18,8 @@ export interface ElectronAPI {
   getLanguage: () => Promise<AppLanguage>
   getAppSettings: () => Promise<AppSettings>
   updateAppSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
+  getFileAssociationStatus: () => Promise<FileAssociationStatus>
+  openDefaultAppsSettings: () => Promise<boolean>
   getViewOptions: () => Promise<{ focusMode: boolean; typewriterMode: boolean; statusBar: boolean; equationNumbering: boolean }>
   getFullscreenState: () => Promise<boolean>
   toggleFullscreen: () => void
@@ -83,6 +86,8 @@ const api: ElectronAPI = {
   getLanguage: () => ipcRenderer.invoke('get-language'),
   getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
   updateAppSettings: (patch) => ipcRenderer.invoke('update-app-settings', patch),
+  getFileAssociationStatus: () => ipcRenderer.invoke('get-file-association-status'),
+  openDefaultAppsSettings: () => ipcRenderer.invoke('open-default-apps-settings'),
   getViewOptions: () => ipcRenderer.invoke('get-view-options'),
   getFullscreenState: () => ipcRenderer.invoke('get-fullscreen-state'),
   toggleFullscreen: () => ipcRenderer.send('toggle-fullscreen'),

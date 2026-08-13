@@ -1739,6 +1739,23 @@ body:not(.codex-enabled) .titlebar-recent-btn { right: 66px; }
 .settings-switch-row input::before { content: ''; display: block; width: 18px; height: 18px; margin: 2px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .16s ease; }
 .settings-switch-row input:checked { background: var(--link-color); }
 .settings-switch-row input:checked::before { transform: translateX(16px); }
+.settings-action-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 4px 0; }
+.settings-action-row > span { display: grid; min-width: 0; gap: 4px; }
+.settings-action-row b { font-size: 13.5px; font-weight: 600; }
+.settings-action-row small { color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.settings-action-row button {
+  flex: none;
+  min-height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0 13px;
+  background: var(--surface-raised, var(--panel-bg));
+  color: var(--text-color);
+  font: 600 12px/1 var(--font-ui);
+  cursor: pointer;
+}
+.settings-action-row button:hover { border-color: color-mix(in srgb, var(--link-color) 56%, var(--border-color)); background: var(--hover-bg); }
+.settings-action-row button:focus-visible { outline: 2px solid color-mix(in srgb, var(--link-color) 60%, transparent); outline-offset: 2px; }
 .settings-note { margin: 6px 0 0; border-radius: var(--radius-md); padding: 9px 11px; background: color-mix(in srgb, var(--link-color) 8%, transparent); color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
 
 @media (max-width: 600px) {
@@ -1746,6 +1763,8 @@ body:not(.codex-enabled) .titlebar-recent-btn { right: 66px; }
   .settings-dialog { width: 100%; max-height: calc(100vh - 16px); }
   .settings-grid { grid-template-columns: 1fr; }
   .settings-grid .settings-wide { grid-column: auto; }
+  .settings-action-row { align-items: stretch; flex-direction: column; }
+  .settings-action-row button { align-self: flex-start; }
 }
 
 /* ---------- Welcome / empty state ---------- */

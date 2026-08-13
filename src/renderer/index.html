@@ -71,6 +71,14 @@
           <label class="settings-switch-row"><span><b id="settings-autosave-label">Auto save</b><small id="settings-autosave-description">Save changes shortly after you stop typing.</small></span><input id="settings-autosave" type="checkbox" role="switch"></label>
           <label class="settings-switch-row"><span><b id="settings-statusbar-label">Status bar</b><small id="settings-statusbar-description">Show word count and document controls.</small></span><input id="settings-statusbar" type="checkbox" role="switch"></label>
         </section>
+        <section id="settings-files-section" class="settings-section" hidden>
+          <h3 id="settings-files-title">Files</h3>
+          <div class="settings-action-row">
+            <span><b id="settings-default-app-label">Default Markdown app</b><small id="settings-default-app-status">Checking the current Windows setting...</small></span>
+            <button id="settings-default-app-btn" type="button">Manage default apps</button>
+          </div>
+          <p id="settings-default-app-note" class="settings-note">Windows requires you to confirm the choice. Select QuillMesh for .md and .markdown.</p>
+        </section>
         <section class="settings-section">
           <h3 id="settings-integrations-title">Integrations</h3>
           <label class="settings-switch-row"><span><b id="settings-codex-label">Codex integration</b><small id="settings-codex-description">Show Codex controls and enable the local Companion bridge.</small></span><input id="settings-codex" type="checkbox" role="switch"></label>

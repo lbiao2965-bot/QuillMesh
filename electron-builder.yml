@@ -29,12 +29,14 @@ npmArgs:
 afterPack: ./scripts/afterPack.js
 
 fileAssociations:
-  - ext: md
-    name: Markdown Document
-    role: Editor
-    mimeType: text/markdown
-  - ext: markdown
-    name: Markdown Document
+  - ext:
+      - md
+      - markdown
+      - mdown
+      - mkd
+    name: QuillMesh.Markdown
+    description: QuillMesh Markdown Document
+    icon: icon.ico
     role: Editor
     mimeType: text/markdown
 
@@ -64,7 +66,9 @@ linux:
 
 nsis:
   oneClick: false
+  perMachine: true
   allowToChangeInstallationDirectory: true
+  include: resources/installer.nsh
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico
   installerHeaderIcon: resources/icon.ico

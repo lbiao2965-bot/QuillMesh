@@ -29,6 +29,7 @@ const { collapsedHeadingStep } = loadTypeScript('../src/renderer/heading-collaps
 const { isEditorPresentationAttribute, isEditorPresentationClass } = loadTypeScript('../src/renderer/export-document.ts')
 const { markdownSectionAtLine, sourceSelectionContext } = loadTypeScript('../src/renderer/codex-context.ts')
 const { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings } = loadTypeScript('../src/shared/settings.ts')
+const { isQuillMeshProgId, markdownLaunchPaths, parseRegistryDefaultValue, parseRegistryProgId } = loadTypeScript('../src/main/file-association.ts')
 
 const cleanA = revisionFor('# A\n', 1000, 4)
 const cleanB = revisionFor('# B\n', 1000, 4)
@@ -167,4 +168,21 @@ assert.equal(normalizeAppSettings({ lineHeight: 0 }).lineHeight, 1.4)
 assert.equal(normalizeAppSettings({ editorFont: 'comic', contentWidth: 'tiny' }).editorFont, DEFAULT_APP_SETTINGS.editorFont)
 assert.deepEqual(mergeAppSettings(DEFAULT_APP_SETTINGS, { theme: 'dark', autosave: true }), { ...DEFAULT_APP_SETTINGS, theme: 'dark', autosave: true })
 
-console.log('document-session regression: persistence, settings, split sync, outline boundaries, and Codex context passed')
+// File launches accept only supported Markdown paths, normalize relative
+// arguments against the invoking process, and deduplicate repeat activations.
+const launchRoot = path.join(path.parse(process.cwd()).root, 'QuillMesh Launch Test')
+assert.deepEqual(
+  markdownLaunchPaths(['QuillMesh.exe', 'notes.md', '--inspect', 'image.png', 'guide.markdown', 'notes.md'], true, launchRoot),
+  [path.resolve(launchRoot, 'notes.md'), path.resolve(launchRoot, 'guide.markdown')],
+)
+assert.deepEqual(
+  markdownLaunchPaths(['electron.exe', process.cwd(), 'draft.mdown', 'readme.txt'], false, launchRoot),
+  [path.resolve(launchRoot, 'draft.mdown')],
+)
+assert.equal(parseRegistryProgId('    ProgId    REG_SZ    QuillMesh.Markdown\r\n'), 'QuillMesh.Markdown')
+assert.equal(parseRegistryDefaultValue('HKEY_CLASSES_ROOT\\.md\r\n    (Default)    REG_SZ    Applications\\QuillMesh.exe\r\n'), 'Applications\\QuillMesh.exe')
+assert.equal(isQuillMeshProgId('QuillMesh.Markdown'), true)
+assert.equal(isQuillMeshProgId('Applications\\QuillMesh.exe'), true)
+assert.equal(isQuillMeshProgId('Typora.md'), false)
+
+console.log('document-session regression: persistence, settings, file associations, split sync, outline boundaries, and Codex context passed')

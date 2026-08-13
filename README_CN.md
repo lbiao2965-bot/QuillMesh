@@ -10,7 +10,7 @@
 
 QuillMesh 将接近 Typora 的所见即所得体验带到普通 Markdown 文件中，集写作、文档导航、公式、表格、图片、导出和外部修改保护于一个桌面应用。它直接读写 `.md` 文件，不创建私有文档格式，也不要求把内容保存到云端。
 
-> 当前开发版本：`0.2.2`。QuillMesh 仍是早期预览版，兼容性和交互细节会继续完善。
+> 当前开发版本：`0.2.3`。QuillMesh 仍是早期预览版，兼容性和交互细节会继续完善。
 
 <p align="center">
   <img src="assets/主页.png" alt="QuillMesh 主页" width="900">
@@ -86,6 +86,7 @@ Markdown 正在成为人、脚本和 AI Agent 之间的共享文件。一份文�
 - 编辑字体：跟随主题、无衬线、衬线或等宽字体。
 - 字号、行距和页面宽度。
 - 自动保存与状态栏开关。
+- Windows Markdown 默认应用状态，以及直达系统确认页面的入口。
 - 可选的 Codex 集成。
 
 设置保存在本机，重启后会自动恢复。
@@ -127,6 +128,8 @@ QuillMesh 可以将当前文档导出为：
 ### 预览安装包
 
 可在 [GitHub Releases](https://github.com/lbiao2965-bot/QuillMesh/releases) 下载已发布的 Windows 预览安装包。预览包可能尚未签名，系统可能显示安全提示。
+
+Windows 安装器会把 QuillMesh 注册为 `.md`、`.markdown`、`.mdown` 和 `.mkd` 的可选打开方式。安装需要管理员确认，最终默认应用仍由用户在 Windows 中选择。安装后打开 **设置 → 文件 → 管理默认应用**，再将 `.md` 和 `.markdown` 设为使用 QuillMesh 打开。
 
 ### 从源码运行
 

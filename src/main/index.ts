@@ -3,10 +3,13 @@ import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
 import { copyFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'fs/promises'
 import { existsSync, readFileSync, readdirSync, watch } from 'fs'
 import { randomUUID } from 'crypto'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { languageFromLocale, normalizeLanguage, translate, type AppLanguage, type TranslationKey } from '../shared/i18n'
 import { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings, type AppSettings } from '../shared/settings'
 import { renderDocx, renderPdf, renderPng } from './document-export'
 import { startCodexBridge } from './codex-bridge'
+import { isQuillMeshProgId, markdownLaunchPaths, parseRegistryDefaultValue, parseRegistryProgId, type FileAssociationStatus } from './file-association'
 import {
   createDocumentId,
   canForceConflictedTarget,
@@ -24,6 +27,9 @@ import {
 } from './document-session'
 
 app.setName('QuillMesh')
+app.setAppUserModelId('io.quillmesh.desktop')
+
+const execFileAsync = promisify(execFile)
 
 const themesDir = join(app.getPath('home'), '.colamd', 'themes')
 const settingsPath = join(app.getPath('userData'), 'settings.json')
@@ -666,11 +672,55 @@ function findWindowForFile(filePath: string): BrowserWindow | null {
 function openFile(filePath: string): void {
   const key = canonicalPathKey(filePath)
   const existing = findWindowForFile(filePath)
-  if (existing) { existing.focus(); const id = getState(existing).pathToDocumentId.get(key); if (id) activateDocument(existing, id); return }
+  if (existing) {
+    if (existing.isMinimized()) existing.restore()
+    existing.show()
+    existing.focus()
+    const id = getState(existing).pathToDocumentId.get(key)
+    if (id) activateDocument(existing, id)
+    return
+  }
   const focused = BrowserWindow.getFocusedWindow()
   if (focused) { void openPathInWindow(focused, filePath); return }
   createWindow(filePath)
 }
+
+async function queryWindowsProgId(extension: '.md' | '.markdown'): Promise<string | null> {
+  const regExe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe')
+  try {
+    const userChoice = await execFileAsync(regExe, ['query', `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${extension}\\UserChoice`, '/v', 'ProgId'], { windowsHide: true })
+    const progId = parseRegistryProgId(userChoice.stdout)
+    if (progId) return progId
+  } catch { /* Fall back to the effective class registration below. */ }
+  try {
+    const registeredClass = await execFileAsync(regExe, ['query', `HKCR\\${extension}`, '/ve'], { windowsHide: true })
+    return parseRegistryDefaultValue(registeredClass.stdout)
+  } catch { return null }
+}
+
+async function fileAssociationStatus(): Promise<FileAssociationStatus> {
+  if (process.platform !== 'win32') return { supported: false, isDefault: false, mdDefault: false, markdownDefault: false }
+  const [mdProgId, markdownProgId] = await Promise.all([queryWindowsProgId('.md'), queryWindowsProgId('.markdown')])
+  const mdDefault = isQuillMeshProgId(mdProgId)
+  const markdownDefault = isQuillMeshProgId(markdownProgId)
+  return { supported: true, isDefault: mdDefault && markdownDefault, mdDefault, markdownDefault }
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) app.quit()
+else app.on('second-instance', (_event, argv, workingDirectory) => {
+  const paths = markdownLaunchPaths(argv, app.isPackaged, workingDirectory || process.cwd())
+  if (!app.isReady()) { pendingFilePaths.push(...paths); return }
+  if (paths.length) {
+    for (const path of paths) openFile(path)
+    return
+  }
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!win) { createWindow(); return }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
 
 // IPC: all file/resource operations below carry documentId. The main process never falls back to the active tab.
 ipcMain.on('codex-bridge-response', (_event, payload: unknown) => {
@@ -690,6 +740,17 @@ ipcMain.on('open-external', (_event, url: unknown) => {
 })
 ipcMain.handle('get-app-settings', () => appSettings)
 ipcMain.handle('update-app-settings', (_event, patch: unknown) => updateApplicationSettings(patch))
+ipcMain.handle('get-file-association-status', () => fileAssociationStatus())
+ipcMain.handle('open-default-apps-settings', async () => {
+  if (process.platform !== 'win32') return false
+  try {
+    await shell.openExternal('ms-settings:defaultapps?registeredAppMachine=QuillMesh')
+    return true
+  } catch {
+    try { await shell.openExternal('ms-settings:defaultapps'); return true }
+    catch { return false }
+  }
+})
 ipcMain.handle('get-codex-connection-status', () => isCodexCompanionConnected())
 ipcMain.handle('send-to-codex', async (_event, payload: unknown) => {
   if (!appSettings.codexEnabled) return { copied: false, opened: false }
@@ -1123,8 +1184,7 @@ async function syncCodexBridge(): Promise<void> {
 
 app.whenReady().then(async () => {
   initializeLanguage(); ensureThemesDir(); buildMenu()
-  const args = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => !arg.startsWith('-'))
-  pendingFilePaths = args
+  pendingFilePaths.push(...markdownLaunchPaths(process.argv, app.isPackaged, process.cwd()))
   if (pendingFilePaths.length) { for (const filePath of pendingFilePaths) createWindow(filePath); pendingFilePaths = [] } else createWindow()
   await syncCodexBridge()
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow() })

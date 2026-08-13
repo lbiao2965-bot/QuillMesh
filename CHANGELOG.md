@@ -4,6 +4,15 @@ Notable user-visible changes are documented here. The project follows semantic v
 
 ## Unreleased
 
+## 0.2.3 - 2026-08-13
+
+- Registered QuillMesh as a Windows handler for `.md`, `.markdown`, `.mdown`, and `.mkd` files.
+- Added a Settings entry that reports the current Markdown association and opens QuillMesh directly in Windows Default Apps.
+- Added single-instance launch routing so files opened from Explorer are handed to the running QuillMesh window.
+- Changed the Windows installer to a per-machine installation so NSIS file associations are registered reliably.
+
+## 0.2.2 - 2026-08-13
+
 - Refined the home screen, tabs, contextual menus, image controls, and compact code-block toolbar.
 - Added a unified Settings panel for theme, font, size, spacing, page width, autosave, and status-bar preferences.
 - Made the Codex integration opt-in; its controls and local bridge remain disabled until explicitly enabled.
