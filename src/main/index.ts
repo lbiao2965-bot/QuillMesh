@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'f
 import { existsSync, readFileSync, readdirSync, watch } from 'fs'
 import { randomUUID } from 'crypto'
 import { languageFromLocale, normalizeLanguage, translate, type AppLanguage, type TranslationKey } from '../shared/i18n'
+import { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings, type AppSettings } from '../shared/settings'
 import { renderDocx, renderPdf, renderPng } from './document-export'
 import { startCodexBridge } from './codex-bridge'
 import {
@@ -35,6 +36,7 @@ let focusModeEnabled = false
 let typewriterModeEnabled = false
 let statusBarEnabled = true
 let equationNumberingEnabled = true
+let appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS }
 
 function t(key: TranslationKey): string { return translate(currentLanguage, key) }
 
@@ -46,12 +48,38 @@ function initializeLanguage(): void {
   }
   currentLanguage = normalizeLanguage(settingsCache.language) ?? languageFromLocale(app.getLocale())
   equationNumberingEnabled = settingsCache.equationNumbering !== false
+  appSettings = normalizeAppSettings(settingsCache)
+  statusBarEnabled = appSettings.statusBar
 }
 
 function saveSettings(): void {
   void mkdir(dirname(settingsPath), { recursive: true })
     .then(() => writeFile(settingsPath, `${JSON.stringify(settingsCache, null, 2)}\n`, 'utf-8'))
     .catch(() => {})
+}
+
+function persistAppSettings(next: AppSettings): void {
+  appSettings = next
+  Object.assign(settingsCache, next)
+  statusBarEnabled = next.statusBar
+  saveSettings()
+}
+
+function broadcastAppSettings(): void {
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.send('app-settings-changed', appSettings)
+}
+
+async function updateApplicationSettings(patch: unknown): Promise<AppSettings> {
+  const previous = appSettings
+  const next = mergeAppSettings(previous, patch)
+  persistAppSettings(next)
+  if (previous.statusBar !== next.statusBar) {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('toggle-status-bar', next.statusBar)
+  }
+  if (previous.codexEnabled !== next.codexEnabled) await syncCodexBridge()
+  buildMenu()
+  broadcastAppSettings()
+  return appSettings
 }
 
 function recentFiles(): string[] {
@@ -142,7 +170,7 @@ let codexCompanionStatus = false
 let codexCompanionTimer: ReturnType<typeof setInterval> | null = null
 const CODEX_COMPANION_TTL_MS = 12_000
 
-function isCodexCompanionConnected(): boolean { return Date.now() - codexCompanionLastSeen < CODEX_COMPANION_TTL_MS }
+function isCodexCompanionConnected(): boolean { return appSettings.codexEnabled && Date.now() - codexCompanionLastSeen < CODEX_COMPANION_TTL_MS }
 function publishCodexCompanionStatus(force = false): void {
   const connected = isCodexCompanionConnected()
   if (!force && connected === codexCompanionStatus) return
@@ -150,6 +178,7 @@ function publishCodexCompanionStatus(force = false): void {
   for (const win of BrowserWindow.getAllWindows()) win.webContents.send('codex-connection-status', connected)
 }
 function markCodexCompanionSeen(): void {
+  if (!appSettings.codexEnabled) return
   codexCompanionLastSeen = Date.now()
   publishCodexCompanionStatus()
 }
@@ -582,11 +611,23 @@ function createWindow(filePath?: string, initialContent?: string): BrowserWindow
     win.webContents.send('toggle-typewriter-mode', typewriterModeEnabled)
     win.webContents.send('toggle-status-bar', statusBarEnabled)
     win.webContents.send('toggle-equation-numbering', equationNumberingEnabled)
+    win.webContents.send('app-settings-changed', appSettings)
     win.webContents.send('codex-connection-status', isCodexCompanionConnected())
+    win.webContents.send('fullscreen-changed', win.isFullScreen())
     broadcastRecentFiles()
     // Document activation waits for the renderer's explicit ready signal so
     // no initial tab payload is lost while Milkdown is still bootstrapping.
   })
+  const notifyFullscreen = (): void => {
+    if (win.isDestroyed()) return
+    if (process.platform !== 'darwin') {
+      win.setAutoHideMenuBar(false)
+      win.setMenuBarVisibility(true)
+    }
+    win.webContents.send('fullscreen-changed', win.isFullScreen())
+  }
+  win.on('enter-full-screen', () => setImmediate(notifyFullscreen))
+  win.on('leave-full-screen', () => setImmediate(notifyFullscreen))
   win.on('close', (event) => {
     if (state.forceClose || dirtyDocuments(state).length === 0) return
     event.preventDefault()
@@ -647,8 +688,11 @@ ipcMain.on('codex-bridge-response', (_event, payload: unknown) => {
 ipcMain.on('open-external', (_event, url: unknown) => {
   if (typeof url === 'string' && /^https?:\/\//i.test(url)) void shell.openExternal(url)
 })
+ipcMain.handle('get-app-settings', () => appSettings)
+ipcMain.handle('update-app-settings', (_event, patch: unknown) => updateApplicationSettings(patch))
 ipcMain.handle('get-codex-connection-status', () => isCodexCompanionConnected())
 ipcMain.handle('send-to-codex', async (_event, payload: unknown) => {
+  if (!appSettings.codexEnabled) return { copied: false, opened: false }
   if (!payload || typeof payload !== 'object') return { copied: false, opened: false }
   const data = payload as { kind?: unknown; path?: unknown; displayName?: unknown; selectedText?: unknown; heading?: unknown; line?: unknown; sectionText?: unknown }
   const kind = data.kind === 'selection' || data.kind === 'section' || data.kind === 'document' ? data.kind : null
@@ -710,6 +754,9 @@ ipcMain.handle('complete-close-save', (event, saved: unknown): boolean => {
 
 ipcMain.handle('get-language', () => currentLanguage)
 ipcMain.handle('get-view-options', () => ({ focusMode: focusModeEnabled, typewriterMode: typewriterModeEnabled, statusBar: statusBarEnabled, equationNumbering: equationNumberingEnabled }))
+ipcMain.handle('get-fullscreen-state', (event) => getWinFromEvent(event)?.isFullScreen() ?? false)
+ipcMain.on('toggle-fullscreen', (event) => { const win = BrowserWindow.fromWebContents(event.sender); if (win) win.setFullScreen(!win.isFullScreen()) })
+ipcMain.on('exit-fullscreen', (event) => { const win = BrowserWindow.fromWebContents(event.sender); if (win?.isFullScreen()) win.setFullScreen(false) })
 ipcMain.handle('get-recent-files', () => recentFiles().map((path) => ({ path, name: basename(path), missing: !pathExists(path) })))
 
 ipcMain.handle('new-document', (event) => {
@@ -956,7 +1003,7 @@ function buildMenu(): void {
   const isMac = process.platform === 'darwin'
   const command = (label: string, id: string, accelerator?: string): Electron.MenuItemConstructorOptions => ({ label, accelerator, click: () => sendToFocused('command-id', id) })
   const customThemes: Electron.MenuItemConstructorOptions[] = []
-  try { for (const file of readdirSync(themesDir).filter((name) => name.endsWith('.css')).sort()) customThemes.push({ label: file.replace(/\.css$/, ''), click: async () => { try { sendToFocused('set-theme', `custom:${file}`); sendToFocused('set-custom-css', await readFile(join(themesDir, file), 'utf-8')) } catch {} } }) } catch {}
+  try { for (const file of readdirSync(themesDir).filter((name) => name.endsWith('.css')).sort()) customThemes.push({ label: file.replace(/\.css$/, ''), click: () => { void updateApplicationSettings({ theme: `custom:${file}` }) } }) } catch {}
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{ label: 'QuillMesh', submenu: [{ role: 'about' as const, label: t('about') }, { type: 'separator' as const }, { role: 'hide' as const, label: t('hide') }, { role: 'hideOthers' as const, label: t('hideOthers') }, { role: 'unhide' as const, label: t('showAll') }, { type: 'separator' as const }, { role: 'quit' as const, label: t('quit') }] }] : []),
     { label: t('file'), submenu: [
@@ -967,7 +1014,7 @@ function buildMenu(): void {
     ] },
     { label: t('edit'), submenu: [
       { role: 'undo', label: t('undo') }, { role: 'redo', label: t('redo') }, { type: 'separator' }, { role: 'cut', label: t('cut') }, { role: 'copy', label: t('copy') }, { role: 'paste', label: t('paste') }, { role: 'selectAll', label: t('selectAll') }, { type: 'separator' },
-      command(t('find'), 'editor.search', 'CmdOrCtrl+F'), command(t('commandPalette'), 'editor.palette', 'CmdOrCtrl+Shift+P'), command(t('insertFormula'), 'editor.math', 'CmdOrCtrl+Shift+E'),
+      command(t('find'), 'editor.search', 'CmdOrCtrl+F'), command(t('commandPalette'), 'editor.palette', 'CmdOrCtrl+Shift+P'), command(t('insertFormula'), 'editor.math', 'CmdOrCtrl+Shift+E'), { type: 'separator' }, command(t('settings'), 'app.settings', 'CmdOrCtrl+,'),
     ] },
     { label: t('format'), submenu: [
       command(t('paragraph'), 'format.paragraph', 'CmdOrCtrl+Alt+0'), { label: t('heading'), submenu: [1, 2, 3, 4, 5, 6].map((level) => command(t(`heading${level}` as TranslationKey), `format.heading-${level}`, `CmdOrCtrl+${level}`)) }, { type: 'separator' },
@@ -977,22 +1024,33 @@ function buildMenu(): void {
       { role: 'resetZoom', label: t('resetZoom') }, { role: 'zoomIn', label: t('zoomIn') }, { role: 'zoomOut', label: t('zoomOut') }, { type: 'separator' }, command(t('toggleFileList'), 'view.filePanel', 'CmdOrCtrl+Shift+B'), command(t('sourceMode'), 'view.source', 'CmdOrCtrl+/'), command(t('splitView'), 'view.split'),
       { label: t('focusMode'), type: 'checkbox', checked: focusModeEnabled, click: (item) => { focusModeEnabled = item.checked; sendToFocused('toggle-focus-mode', item.checked) } },
       { label: t('typewriterMode'), type: 'checkbox', checked: typewriterModeEnabled, click: (item) => { typewriterModeEnabled = item.checked; sendToFocused('toggle-typewriter-mode', item.checked) } },
-      { label: t('showStatusBar'), type: 'checkbox', checked: statusBarEnabled, click: (item) => { statusBarEnabled = item.checked; sendToFocused('toggle-status-bar', item.checked) } }, { role: 'togglefullscreen', label: t('toggleFullscreen') },
+      { label: t('showStatusBar'), type: 'checkbox', checked: statusBarEnabled, click: (item) => { void updateApplicationSettings({ statusBar: item.checked }) } },
+      { label: t('toggleFullscreen'), accelerator: isMac ? 'Ctrl+Command+F' : 'F11', click: () => { const win = BrowserWindow.getFocusedWindow(); if (win) win.setFullScreen(!win.isFullScreen()) } },
     ] },
-    { label: t('theme'), submenu: [{ label: t('light'), click: () => sendToFocused('set-theme', 'light') }, { label: t('dark'), click: () => sendToFocused('set-theme', 'dark') }, { label: t('elegant'), click: () => sendToFocused('set-theme', 'elegant') }, { label: t('newsprint'), click: () => sendToFocused('set-theme', 'newsprint') }, ...customThemes, { type: 'separator' }, { label: t('importTheme'), click: () => sendToFocused('menu-import-theme') }] },
+    { label: t('theme'), submenu: [{ label: t('light'), click: () => { void updateApplicationSettings({ theme: 'light' }) } }, { label: t('dark'), click: () => { void updateApplicationSettings({ theme: 'dark' }) } }, { label: t('elegant'), click: () => { void updateApplicationSettings({ theme: 'elegant' }) } }, { label: t('newsprint'), click: () => { void updateApplicationSettings({ theme: 'newsprint' }) } }, ...customThemes, { type: 'separator' }, { label: t('importTheme'), click: () => sendToFocused('menu-import-theme') }] },
     { label: t('language'), submenu: [{ label: t('simplifiedChinese'), type: 'radio', checked: currentLanguage === 'zh-CN', click: () => setLanguage('zh-CN') }, { label: t('english'), type: 'radio', checked: currentLanguage === 'en', click: () => setLanguage('en') }] },
     { label: t('help'), submenu: [command(t('featureDemo'), 'help.demo'), { label: t('cheatsheet'), click: async () => { try { createWindow(undefined, await readFile(cheatsheetPath, 'utf-8')) } catch { createWindow() } } }, { label: t('about'), click: () => { const detail = currentLanguage === 'zh-CN' ? `织墨——面向人类与 AI Agent 协作的本地 Markdown 编辑器。\n\n版本 ${app.getVersion()}\n基于 ColaMD 修改，依 MIT 许可证发布。` : `A local Markdown editor for people and AI agents.\n\nVersion ${app.getVersion()}\nDerived from ColaMD and distributed under the MIT License.`; void dialog.showMessageBox({ type: 'info', title: 'QuillMesh', message: 'QuillMesh', detail }) } }] },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-app.whenReady().then(async () => {
-  initializeLanguage(); ensureThemesDir(); buildMenu()
-  const args = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => !arg.startsWith('-'))
-  pendingFilePaths = args
-  if (pendingFilePaths.length) { for (const filePath of pendingFilePaths) createWindow(filePath); pendingFilePaths = [] } else createWindow()
+async function syncCodexBridge(): Promise<void> {
+  if (!app.isReady()) return
+  if (!appSettings.codexEnabled) {
+    if (codexCompanionTimer) clearInterval(codexCompanionTimer)
+    codexCompanionTimer = null
+    codexCompanionLastSeen = 0
+    codexCompanionStatus = false
+    const stop = stopCodexBridge
+    stopCodexBridge = null
+    if (stop) await stop().catch(() => {})
+    else await unlink(join(app.getPath('userData'), 'codex-bridge.json')).catch(() => {})
+    publishCodexCompanionStatus(true)
+    return
+  }
+  if (stopCodexBridge) return
   const statePath = join(app.getPath('userData'), 'codex-bridge.json')
-  stopCodexBridge = await startCodexBridge(statePath, {
+  const stop = await startCodexBridge(statePath, {
     context: async () => {
       markCodexCompanionSeen()
       const win = bridgeWindow()
@@ -1056,7 +1114,19 @@ app.whenReady().then(async () => {
       return { exported: true, path: target, format }
     },
   }).catch(() => null)
-  codexCompanionTimer = setInterval(() => publishCodexCompanionStatus(), 3_000)
+  if (!stop) return
+  if (!appSettings.codexEnabled) { await stop().catch(() => {}); return }
+  stopCodexBridge = stop
+  codexCompanionTimer ??= setInterval(() => publishCodexCompanionStatus(), 3_000)
+  publishCodexCompanionStatus(true)
+}
+
+app.whenReady().then(async () => {
+  initializeLanguage(); ensureThemesDir(); buildMenu()
+  const args = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => !arg.startsWith('-'))
+  pendingFilePaths = args
+  if (pendingFilePaths.length) { for (const filePath of pendingFilePaths) createWindow(filePath); pendingFilePaths = [] } else createWindow()
+  await syncCodexBridge()
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow() })
 })
 app.on('before-quit', () => { if (codexCompanionTimer) clearInterval(codexCompanionTimer); if (stopCodexBridge) void stopCodexBridge() })

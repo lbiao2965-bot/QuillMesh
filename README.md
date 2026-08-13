@@ -1,134 +1,156 @@
 # QuillMesh
 
-**A local-first Markdown editor for people and AI agents.**
+**A polished, local-first Markdown editor for focused writing and safe AI collaboration.**
 
 **English** · [简体中文](README_CN.md)
 
-QuillMesh combines a Typora-inspired WYSIWYG writing experience with file coordination designed for Codex, Claude Code, scripts, and other external tools. It reads and writes ordinary `.md` files, uses no proprietary document format, and does not require cloud storage.
+[![Release](https://img.shields.io/github/v/release/lbiao2965-bot/QuillMesh?include_prereleases&label=preview)](https://github.com/lbiao2965-bot/QuillMesh/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#build-from-source)
 
-> Current version: `0.2.1`. QuillMesh is an early-stage project; feedback and contributions are welcome.
+QuillMesh brings a calm, Typora-inspired WYSIWYG experience to ordinary Markdown files. It combines rich editing, document navigation, formulas, tables, images, export, and revision-safe coordination with external tools—without introducing a proprietary document format or requiring cloud storage.
+
+> Current development version: `0.2.2`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
 
 <p align="center">
   <img src="assets/主页.png" alt="QuillMesh home screen" width="900">
 </p>
 
-## Why QuillMesh
+## What makes QuillMesh different
 
-People and agents increasingly edit the same Markdown files. You may be reorganizing a document while an agent adds content and a script updates data. Traditional editors can silently reload, overwrite newer content, or leave the user to determine which copy is authoritative.
-
-QuillMesh treats the file as a shared handoff surface:
+Markdown increasingly sits between people, scripts, and AI agents. A document may be open in an editor while Codex updates a section or another tool refreshes generated content. QuillMesh treats the file as a shared handoff surface instead of silently choosing a winner:
 
 - Clean documents refresh automatically after external writes.
-- Overlapping local and external changes open a conflict dialog instead of occupying the editor permanently.
-- Saves validate the disk revision before writing.
-- Closing a tab or window checks all unsaved documents.
-- Companion changes appear as a Diff in QuillMesh and are written only after acceptance.
+- Overlapping edits open a focused comparison dialog.
+- Saves verify the on-disk revision before replacing content.
+- Unsaved tabs and windows always receive a close check.
+- AI proposals are shown as reviewed Diffs and are written only after acceptance.
 
-## Highlights
+The result is a Markdown editor that remains pleasant for normal writing while being much safer in agent-assisted workflows.
 
-### Writing and navigation
+## Editing experience
 
-- WYSIWYG, source, and synchronized source/preview split views.
-- Multi-tab editing, recent documents, and sibling Markdown browsing.
+### Focused writing and navigation
+
+- WYSIWYG, source, and synchronized source/preview split modes.
+- Browser-like tabs, recent files, and sibling Markdown browsing.
 - Outline navigation, heading folding, and drag-to-reorder sections.
-- Bold, italic, links, quotes, ordered/unordered/task lists, highlights, and inline code.
-- `Ctrl+Shift+P` command palette, `/` insert menu, and a Typora-inspired context menu.
-- Consolidated task view with incomplete-task filtering and source navigation.
+- Bold, italic, links, quotes, ordered/unordered/task lists, highlight, and inline code.
+- `Ctrl+Shift+P` command palette, `/` quick insert, and a compact context menu.
+- Consolidated task view with incomplete-task filtering and jump-to-source behavior.
+- Full-screen toolbar with `Esc` and `F11` exit support.
 
 <p align="center">
-  <img src="assets/文件编辑.png" alt="QuillMesh editor, outline, and Codex status" width="1000">
+  <img src="assets/文件编辑.png" alt="QuillMesh document editing with outline and tabs" width="1000">
 </p>
 
-### Tables, code, and insertion
+### Tables, code, and quick insertion
 
-- GFM table editing, whole-table alignment, row/column actions, and draggable column widths.
-- Code-block copy, language selection, and wrapping.
-- Insert images, tables, code blocks, formulas, horizontal rules, and paragraphs above or below.
+- GFM table editing, whole-table alignment, row/column actions, copy/delete, and draggable column widths.
+- Code-block copy, language selection, and optional line wrapping.
+- Insert images, tables, code blocks, formulas, horizontal rules, or paragraphs above and below.
 - Link hover previews with open and copy actions.
 
 <p align="center">
-  <img src="assets/插入.png" alt="QuillMesh insert menu" width="760">
+  <img src="assets/插入.png" alt="QuillMesh context and insert menus" width="1000">
 </p>
 
-### Math
+### LaTeX formulas
 
-- LaTeX inline and centered block math.
-- Live formula preview while editing.
+- Inline math and centered display math through KaTeX.
+- Live preview while editing LaTeX.
 - Optional automatic numbering for block equations.
-- Companion checks for formula syntax, layout, and numbering.
+- Formula-aware HTML, PDF, PNG, and DOCX export.
 
 <p align="center">
   <img src="assets/公式编辑.png" alt="QuillMesh LaTeX editor with live preview" width="760">
 </p>
 
-### Images and assets
+### Images and local assets
 
-- Clipboard images are stored beside the document under `assets/` and inserted with relative paths.
-- Drag handles resize images while preserving the intended Markdown display size.
-- Context actions copy an image or path and reveal the asset in the file manager.
-- Click-to-open lightbox with wheel zoom and drag-to-pan.
+- Paste clipboard images directly into a document-local `assets/` folder.
+- Keep portable relative paths in Markdown.
+- Resize images visually with drag handles.
+- Copy an image, reset its size, or reveal it in the file manager from the context menu.
+- Click for a lightbox preview, then use the mouse wheel to zoom and drag to pan.
 
 <p align="center">
-  <img src="assets/图片编辑.png" alt="QuillMesh image resizing and task view" width="760">
+  <img src="assets/图片编辑.png" alt="QuillMesh visual image resizing and image menu" width="1000">
 </p>
 
-### File safety and export
+## Personal settings
 
-- External-change watching, revision conflicts, and an autosave toggle.
-- Guarded rendering for very long documents.
-- PDF, PNG, HTML, and Word `.docx` export.
-- English/Chinese UI, custom CSS themes, and cross-platform build targets.
+Open Settings from the home page, **Edit → Settings**, or `Ctrl+,`.
 
-## Codex collaboration
+- Theme: Elegant, Light, Dark, Newsprint, or imported CSS.
+- Editor font: follow the theme, sans serif, serif, or monospace.
+- Font size, line spacing, and content width.
+- Autosave and status-bar controls.
+- Optional Codex integration.
 
-The repository includes [QuillMesh Companion](plugins/quillmesh-companion/README.md). Once installed and enabled, Codex can directly read the active QuillMesh document, cursor, and selection over local MCP. You do not need to paste the Markdown body into the conversation.
+Preferences are stored locally and restored on the next launch.
 
-Typical workflow:
+## Optional Codex collaboration
 
-1. Open QuillMesh and the Markdown document you want to work on.
-2. Ask Codex to “read the current QuillMesh document,” “check the current section's formulas,” or “rewrite my selection.”
-3. Companion obtains only the required context and retains the current revision.
-4. Proposed changes appear as paragraph-level Diffs at the original location in QuillMesh.
-5. Accept or reject the proposal; accepted changes pass another revision check before writing and refreshing.
+Codex integration is **off by default**. When it is disabled, QuillMesh does not show Codex controls and does not start the local Companion bridge. Enable it in Settings only when you want the workflow.
 
-The upper-right Codex menu and `Ctrl+Shift+P` palette provide shortcuts for selection, current-section, and full-document requests. They can generate an operation prompt, but Companion reads the document itself—no manual content paste is required. The status bar shows whether Codex is connected.
+The repository includes [QuillMesh Companion](plugins/quillmesh-companion/README.md), a local Codex plugin and MCP service. Once installed and enabled, Codex can:
 
-Companion can also:
+- read the active document, cursor, selection, or current section;
+- inspect Markdown structure, formulas, tables, quotes, tasks, and image paths;
+- open a document at a heading or approximate line;
+- propose exact or multi-paragraph edits;
+- return changes to QuillMesh as a visible Diff;
+- request PDF, PNG, HTML, or DOCX export.
 
-- inspect Markdown structure, formulas, tables, quotes, and image paths;
-- read bounded line ranges instead of flooding context with long documents;
-- open a file at a heading or approximate line;
-- apply exact revision-safe replacements or atomic multi-paragraph edits;
-- export PDF, PNG, HTML, or DOCX when explicitly requested.
+A typical reviewed workflow is:
+
+1. Select text or place the cursor in a section in QuillMesh.
+2. Send the selection, section, or document to Codex.
+3. Codex prepares a revision-bound proposal.
+4. QuillMesh displays the Diff at the document level.
+5. Accept or reject it. Accepted changes pass another revision check before writing.
 
 The bridge listens only on `127.0.0.1` and uses a random bearer token. QuillMesh does not upload documents to a separate hosted bridge.
 
-## Quick start
+## Export
 
-### Installers
+QuillMesh can export the active document to:
 
-Packaged installers are not committed to the repository. Download them from [GitHub Releases](https://github.com/lbiao2965-bot/QuillMesh/releases) after a release is published, or build one locally with the commands below.
+- PDF
+- PNG image
+- self-contained HTML
+- Microsoft Word `.docx`
 
-### Run from source
+## Download and run
 
-Node.js 22.12 or newer is required.
+### Preview installers
+
+Download available Windows preview installers from [GitHub Releases](https://github.com/lbiao2965-bot/QuillMesh/releases). Preview packages may be unsigned and can trigger an operating-system security warning.
+
+### Build from source
+
+Requirements: Node.js 22.12 or newer and npm.
 
 ```powershell
+git clone https://github.com/lbiao2965-bot/QuillMesh.git
 cd QuillMesh
 npm install
 npm run dev
 ```
 
-Build the application:
+Build and verify:
 
 ```powershell
-npm run build
+npm run verify
 ```
 
-Create an installer:
+Create a platform package:
 
 ```powershell
 npm run dist:win
+npm run dist:mac
+npm run dist:linux
 ```
 
 Artifacts are written to `release/` by default.
@@ -140,49 +162,41 @@ Artifacts are written to `release/` by default.
 | Open file | `Ctrl+O` | `⌘O` |
 | Save / Save As | `Ctrl+S` / `Ctrl+Shift+S` | `⌘S` / `⌘⇧S` |
 | Close tab | `Ctrl+W` | `⌘W` |
+| Settings | `Ctrl+,` | `⌘,` |
 | Command palette | `Ctrl+Shift+P` | `⌘⇧P` |
 | Search | `Ctrl+F` | `⌘F` |
 | Bold / italic | `Ctrl+B` / `Ctrl+I` | `⌘B` / `⌘I` |
 | Link | `Ctrl+K` | `⌘K` |
 | Headings 1–6 | `Ctrl+1`–`Ctrl+6` | `⌘1`–`⌘6` |
 | Source mode | `Ctrl+/` | `⌘/` |
-| Insert/edit math | `Ctrl+Shift+E` | `⌘⇧E` |
+| Insert/edit formula | `Ctrl+Shift+E` | `⌘⇧E` |
 | Insert image | `Ctrl+Shift+I` | `⌘⇧I` |
 | Insert code block | `Ctrl+Shift+K` | `⌘⇧K` |
+| Toggle full screen | `F11` | `⌃⌘F` |
+| Exit full screen | `Esc` | `Esc` |
 
-## Project layout
+## Project structure
 
 ```text
-src/main/       Electron main process, sessions, conflict safety, export, and local bridge
+src/main/       Electron main process, document sessions, conflict safety, export, and local bridge
 src/preload/    Typed IPC boundary
-src/renderer/   Milkdown/ProseMirror editor and application UI
-src/shared/     Shared types and translations
+src/renderer/   Milkdown/ProseMirror editor and desktop UI
+src/shared/     Shared settings, types, and translations
 resources/      Icons, demos, and built-in templates
 themes/         Example CSS themes
-plugins/        QuillMesh Companion Codex plugin and MCP server
-assets/         README product screenshots
+plugins/        QuillMesh Companion plugin and MCP service
+assets/         Product screenshots used by this README
 ```
 
-See the [architecture guide](docs/ARCHITECTURE.md) for implementation details.
-
-## Development and verification
-
-Before submitting a change, install both dependency sets and run the unified verification command:
-
-```powershell
-npm install
-npm --prefix plugins/quillmesh-companion install
-npm run verify
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.md](SECURITY.md) for responsible vulnerability reporting, and [docs/SIGNING.md](docs/SIGNING.md) for signed release requirements.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for implementation details, [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.md](SECURITY.md) for responsible vulnerability reporting, and [docs/SIGNING.md](docs/SIGNING.md) for release-signing requirements.
 
 ## Roadmap
 
-- Continue improving compatibility with CommonMark/GFM and common Typora conventions.
-- Extend long-document performance and cross-directory asset management.
-- Polish Companion installation, Diff review, and additional agent workflows.
-- Publish downloadable Windows, macOS, and Linux builds.
+- Improve CommonMark/GFM and common Typora compatibility.
+- Continue long-document performance work.
+- Expand cross-directory asset management and export fidelity.
+- Polish Companion installation and reviewed agent workflows.
+- Publish signed Windows and notarized macOS builds.
 
 ## License and attribution
 

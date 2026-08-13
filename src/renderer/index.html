@@ -7,6 +7,22 @@
   <title>QuillMesh</title>
 </head>
 <body class="welcome-mode">
+  <div id="fullscreen-menu-bar" hidden>
+    <span class="fullscreen-product">QuillMesh</span>
+    <button id="fullscreen-view-btn" class="fullscreen-menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+      <span id="fullscreen-view-label">View</span>
+      <span aria-hidden="true">⌄</span>
+    </button>
+    <div id="fullscreen-view-menu" class="fullscreen-view-menu" role="menu" hidden>
+      <button id="fullscreen-menu-exit" type="button" role="menuitem">
+        <span id="fullscreen-menu-exit-label">Exit Full Screen</span>
+        <kbd>Esc / F11</kbd>
+      </button>
+    </div>
+    <span class="fullscreen-menu-spacer"></span>
+    <span id="fullscreen-exit-hint" class="fullscreen-exit-hint">Press Esc to exit full screen</span>
+    <button id="fullscreen-exit-btn" class="fullscreen-exit-btn" type="button">Exit Full Screen</button>
+  </div>
   <div id="titlebar">
     <div id="agent-dot"></div>
     <button id="file-toggle-btn" title="Show / Hide File List (Ctrl/Cmd+Shift+B)">
@@ -26,10 +42,43 @@
         <circle cx="8" cy="8" r="5.5"/><path d="M8 4.7V8l2.4 1.5"/>
       </svg>
     </button>
+    <button id="settings-btn" class="titlebar-icon-btn" type="button" title="Settings" aria-label="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+    </button>
   </div>
   <div id="codex-menu" class="popover-menu codex-menu" role="menu" hidden></div>
   <div id="recent-files-menu" class="popover-menu" hidden></div>
   <div id="codex-toast" class="codex-toast" role="status" aria-live="polite" hidden></div>
+  <div id="settings-overlay" class="settings-overlay" hidden>
+    <section id="settings-dialog" class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="settings-header">
+        <div><h2 id="settings-title">Settings</h2><p id="settings-description">Personalize your writing experience.</p></div>
+        <button id="settings-close" class="settings-close" type="button" aria-label="Close">×</button>
+      </header>
+      <div class="settings-body">
+        <section class="settings-section">
+          <h3 id="settings-appearance-title">Appearance</h3>
+          <div class="settings-grid">
+            <label><span id="settings-theme-label">Theme</span><select id="settings-theme"><option value="elegant">Elegant</option><option value="light">Light</option><option value="dark">Dark</option><option value="newsprint">Newsprint</option></select></label>
+            <label><span id="settings-font-label">Editor font</span><select id="settings-font"><option value="theme">Follow theme</option><option value="sans">Sans serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
+            <label><span id="settings-font-size-label">Font size</span><output id="settings-font-size-value">16 px</output><input id="settings-font-size" type="range" min="12" max="24" step="1" value="16"></label>
+            <label><span id="settings-line-height-label">Line spacing</span><output id="settings-line-height-value">1.75</output><input id="settings-line-height" type="range" min="1.4" max="2.2" step="0.05" value="1.75"></label>
+            <label class="settings-wide"><span id="settings-width-label">Page width</span><select id="settings-width"><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="fluid">Fill window</option></select></label>
+          </div>
+        </section>
+        <section class="settings-section">
+          <h3 id="settings-editor-title">Editor</h3>
+          <label class="settings-switch-row"><span><b id="settings-autosave-label">Auto save</b><small id="settings-autosave-description">Save changes shortly after you stop typing.</small></span><input id="settings-autosave" type="checkbox" role="switch"></label>
+          <label class="settings-switch-row"><span><b id="settings-statusbar-label">Status bar</b><small id="settings-statusbar-description">Show word count and document controls.</small></span><input id="settings-statusbar" type="checkbox" role="switch"></label>
+        </section>
+        <section class="settings-section">
+          <h3 id="settings-integrations-title">Integrations</h3>
+          <label class="settings-switch-row"><span><b id="settings-codex-label">Codex integration</b><small id="settings-codex-description">Show Codex controls and enable the local Companion bridge.</small></span><input id="settings-codex" type="checkbox" role="switch"></label>
+          <p id="settings-codex-note" class="settings-note">Off by default. No Codex controls are shown until you enable it.</p>
+        </section>
+      </div>
+    </section>
+  </div>
   <section id="conflict-banner" role="alertdialog" aria-modal="true" aria-labelledby="conflict-title" hidden>
     <div class="conflict-modal">
       <div class="conflict-heading">
@@ -72,6 +121,9 @@
   </aside>
   <main id="workspace">
     <div id="empty-workspace">
+      <button id="welcome-settings-btn" class="welcome-settings-btn" type="button" title="Settings" aria-label="Settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>
+      </button>
       <section class="welcome-panel" aria-labelledby="welcome-product-name">
         <img id="welcome-logo" src="/icon.png" alt="">
         <h1 id="welcome-product-name">QuillMesh</h1>

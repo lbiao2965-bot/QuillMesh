@@ -34,9 +34,9 @@ Visible editor changes should also be exercised manually with a temporary Markdo
 
 ## Commit and pull request guidance
 
-- Use a concise imperative commit subject.
-- Explain user-visible behavior, compatibility impact, and verification in the pull request.
-- Add or update a deterministic regression test for data-loss, revision, parsing, or export defects.
-- Keep generated `dist/` only where the Companion plugin intentionally tracks its runtime bundle; other application build outputs belong in Releases.
+* Use a concise imperative commit subject.
+* Explain user-visible behavior, compatibility impact, and verification in the pull request.
+* Add or update a deterministic regression test for data-loss, revision, parsing, or export defects.
+* Keep generated `dist/` only where the Companion plugin intentionally tracks its runtime bundle; other application build outputs belong in Releases.
 
 By contributing, you agree that your contribution is licensed under the repository's MIT License.
