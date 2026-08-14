@@ -8,13 +8,13 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)\
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#从源码运行)
 
+<p align="center">
+  <img src="assets/quillmesh-x-launch-v1.png" alt="QuillMesh 面向人与 AI Agent 的本地 Markdown 编辑器" width="1200">
+</p>
+
 QuillMesh 将接近 Typora 的所见即所得体验带到普通 Markdown 文件中，集写作、文档导航、公式、表格、图片、导出和外部修改保护于一个桌面应用。它直接读写 `.md` 文件，不创建私有文档格式，也不要求把内容保存到云端。
 
-> 当前开发版本：`0.2.3`。QuillMesh 仍是早期预览版，兼容性和交互细节会继续完善。
-
-<p align="center">
-  <img src="assets/主页.png" alt="QuillMesh 主页" width="900">
-</p>
+> 当前开发版本：`0.2.4`。QuillMesh 仍是早期预览版，兼容性和交互细节会继续完善。
 
 ## 为什么选择 QuillMesh
 
