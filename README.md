@@ -8,13 +8,13 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#build-from-source)
 
+<p align="center">
+  <img src="assets/quillmesh-x-launch-v1.png" alt="QuillMesh local-first Markdown editor for people and AI" width="1200">
+</p>
+
 QuillMesh brings a calm, Typora-inspired WYSIWYG experience to ordinary Markdown files. It combines rich editing, document navigation, formulas, tables, images, export, and revision-safe coordination with external tools—without introducing a proprietary document format or requiring cloud storage.
 
-> Current development version: `0.2.3`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
-
-<p align="center">
-  <img src="assets/主页.png" alt="QuillMesh home screen" width="900">
-</p>
+> Current development version: `0.2.4`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
 
 ## What makes QuillMesh different
 
