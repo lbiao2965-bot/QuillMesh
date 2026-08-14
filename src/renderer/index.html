@@ -56,34 +56,42 @@
         <button id="settings-close" class="settings-close" type="button" aria-label="Close">×</button>
       </header>
       <div class="settings-body">
-        <section class="settings-section">
-          <h3 id="settings-appearance-title">Appearance</h3>
-          <div class="settings-grid">
-            <label><span id="settings-theme-label">Theme</span><select id="settings-theme"><option value="elegant">Elegant</option><option value="light">Light</option><option value="dark">Dark</option><option value="newsprint">Newsprint</option></select></label>
-            <label><span id="settings-font-label">Editor font</span><select id="settings-font"><option value="theme">Follow theme</option><option value="sans">Sans serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
-            <label><span id="settings-font-size-label">Font size</span><output id="settings-font-size-value">16 px</output><input id="settings-font-size" type="range" min="12" max="24" step="1" value="16"></label>
-            <label><span id="settings-line-height-label">Line spacing</span><output id="settings-line-height-value">1.75</output><input id="settings-line-height" type="range" min="1.4" max="2.2" step="0.05" value="1.75"></label>
-            <label class="settings-wide"><span id="settings-width-label">Page width</span><select id="settings-width"><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="fluid">Fill window</option></select></label>
-          </div>
-        </section>
-        <section class="settings-section">
-          <h3 id="settings-editor-title">Editor</h3>
-          <label class="settings-switch-row"><span><b id="settings-autosave-label">Auto save</b><small id="settings-autosave-description">Save changes shortly after you stop typing.</small></span><input id="settings-autosave" type="checkbox" role="switch"></label>
-          <label class="settings-switch-row"><span><b id="settings-statusbar-label">Status bar</b><small id="settings-statusbar-description">Show word count and document controls.</small></span><input id="settings-statusbar" type="checkbox" role="switch"></label>
-        </section>
-        <section id="settings-files-section" class="settings-section" hidden>
-          <h3 id="settings-files-title">Files</h3>
-          <div class="settings-action-row">
-            <span><b id="settings-default-app-label">Default Markdown app</b><small id="settings-default-app-status">Checking the current Windows setting...</small></span>
-            <button id="settings-default-app-btn" type="button">Manage default apps</button>
-          </div>
-          <p id="settings-default-app-note" class="settings-note">Windows requires you to confirm the choice. Select QuillMesh for .md and .markdown.</p>
-        </section>
-        <section class="settings-section">
-          <h3 id="settings-integrations-title">Integrations</h3>
-          <label class="settings-switch-row"><span><b id="settings-codex-label">Codex integration</b><small id="settings-codex-description">Show Codex controls and enable the local Companion bridge.</small></span><input id="settings-codex" type="checkbox" role="switch"></label>
-          <p id="settings-codex-note" class="settings-note">Off by default. No Codex controls are shown until you enable it.</p>
-        </section>
+        <nav class="settings-nav" aria-label="Settings sections">
+          <button type="button" class="settings-nav-item active" data-section="appearance" id="settings-nav-appearance">Appearance</button>
+          <button type="button" class="settings-nav-item" data-section="editor" id="settings-nav-editor">Editor</button>
+          <button type="button" class="settings-nav-item" data-section="files" id="settings-nav-files" hidden>Files</button>
+          <button type="button" class="settings-nav-item" data-section="integrations" id="settings-nav-integrations">Integrations</button>
+        </nav>
+        <div class="settings-content">
+          <section class="settings-section active" data-section="appearance">
+            <h3 id="settings-appearance-title">Appearance</h3>
+            <div class="settings-grid">
+              <label class="settings-wide settings-theme-field"><span id="settings-theme-label">Theme</span><div id="settings-theme-cards" class="settings-theme-cards" role="radiogroup" aria-labelledby="settings-theme-label"></div></label>
+              <label><span id="settings-font-label">Editor font</span><select id="settings-font"><option value="theme">Follow theme</option><option value="sans">Sans serif</option><option value="serif">Serif</option><option value="mono">Monospace</option></select></label>
+              <label><span id="settings-font-size-label">Font size</span><output id="settings-font-size-value">16 px</output><input id="settings-font-size" type="range" min="12" max="24" step="1" value="16"></label>
+              <label><span id="settings-line-height-label">Line spacing</span><output id="settings-line-height-value">1.75</output><input id="settings-line-height" type="range" min="1.4" max="2.2" step="0.05" value="1.75"></label>
+              <label class="settings-wide"><span id="settings-width-label">Page width</span><select id="settings-width"><option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="fluid">Fill window</option></select></label>
+            </div>
+          </section>
+          <section class="settings-section" data-section="editor">
+            <h3 id="settings-editor-title">Editor</h3>
+            <label class="settings-switch-row"><span><b id="settings-autosave-label">Auto save</b><small id="settings-autosave-description">Save changes shortly after you stop typing.</small></span><input id="settings-autosave" type="checkbox" role="switch"></label>
+            <label class="settings-switch-row"><span><b id="settings-statusbar-label">Status bar</b><small id="settings-statusbar-description">Show word count and document controls.</small></span><input id="settings-statusbar" type="checkbox" role="switch"></label>
+          </section>
+          <section id="settings-files-section" class="settings-section" data-section="files" hidden>
+            <h3 id="settings-files-title">Files</h3>
+            <div class="settings-action-row">
+              <span><b id="settings-default-app-label">Default Markdown app</b><small id="settings-default-app-status">Checking the current Windows setting...</small></span>
+              <button id="settings-default-app-btn" type="button">Manage default apps</button>
+            </div>
+            <p id="settings-default-app-note" class="settings-note">Windows requires you to confirm the choice. Select QuillMesh for .md and .markdown.</p>
+          </section>
+          <section class="settings-section" data-section="integrations">
+            <h3 id="settings-integrations-title">Integrations</h3>
+            <label class="settings-switch-row"><span><b id="settings-codex-label">Codex integration</b><small id="settings-codex-description">Show Codex controls and enable the local Companion bridge.</small></span><input id="settings-codex" type="checkbox" role="switch"></label>
+            <p id="settings-codex-note" class="settings-note">Off by default. No Codex controls are shown until you enable it.</p>
+          </section>
+        </div>
       </div>
     </section>
   </div>

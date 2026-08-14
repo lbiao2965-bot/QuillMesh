@@ -2188,3 +2188,269 @@ body:not(.codex-enabled) #document-tabs { padding-right: 144px; }
 .colamd-floating-table-tools button:hover { background: rgba(127, 127, 127, .24); color: var(--text-color); }
 .colamd-floating-table-tools button.danger:hover { background: rgba(214, 69, 69, .14); color: var(--danger); }
 .colamd-table-tools-divider { height: 14px; margin: 0 2px; background: color-mix(in srgb, var(--text-color) 22%, transparent); }
+
+/* === 公式弹窗：可拖动 + 半透明，编辑时可见文档 === */
+.math-modal-overlay {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+.math-modal {
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--bg-color) 78%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border-color: color-mix(in srgb, var(--text-color) 12%, transparent);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .2), 0 4px 12px rgba(0, 0, 0, .1);
+  animation: colamd-float-in .15s ease-out;
+}
+.math-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px -4px 0;
+  padding: 2px 2px 0 4px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.math-modal-header:active { cursor: grabbing; }
+.math-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 55%, transparent);
+  cursor: pointer;
+  transition: color .12s ease, background-color .12s ease;
+}
+.math-modal-close:hover {
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--text-color) 10%, transparent);
+}
+
+/* === 右键菜单收尾：与悬浮控件统一的入场曲线 / 圆角 / 图标透明度 === */
+.selection-format-menu,
+.selection-insert-submenu,
+.popover-menu,
+.command-surface,
+.link-preview {
+  animation: colamd-float-in .13s ease-out;
+}
+.selection-format-menu,
+.selection-insert-submenu,
+.popover-menu {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.selection-edit-icon,
+.selection-format-icon {
+  color: color-mix(in srgb, var(--text-color) 58%, transparent);
+}
+.selection-edit-icon:hover,
+.selection-format-icon:hover,
+.selection-edit-icon.active,
+.selection-format-icon.active {
+  color: var(--text-color);
+}
+
+/* === 设置面板重设计：侧边导航 + 主题卡片 + 滑杆美化 === */
+.settings-dialog { width: min(720px, calc(100vw - 32px)); }
+.settings-body {
+  display: grid;
+  grid-template-columns: 172px minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 12px;
+  border-right: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  background: color-mix(in srgb, var(--text-color) 3%, transparent);
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 62%, transparent);
+  font: 500 13px/1.4 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: color .12s ease, background-color .12s ease;
+}
+.settings-nav-item:hover {
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--text-color) 7%, transparent);
+}
+.settings-nav-item.active {
+  color: var(--link-color);
+  background: color-mix(in srgb, var(--link-color) 12%, transparent);
+  font-weight: 600;
+}
+.settings-nav-item[hidden] { display: none; }
+.settings-content {
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  padding: 4px 24px 24px;
+}
+.settings-content .settings-section { display: none; border-top: 0; padding-top: 16px; }
+.settings-content .settings-section.active { display: block; }
+.settings-content .settings-section[hidden] { display: none; }
+
+/* 主题卡片 */
+.settings-theme-cards {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 10px;
+  margin-top: 2px;
+}
+.settings-theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-color);
+  font: 500 12px/1.3 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .12s ease, box-shadow .12s ease, transform .12s ease;
+}
+.settings-theme-card:hover {
+  border-color: color-mix(in srgb, var(--link-color) 45%, var(--border-color));
+  transform: translateY(-1px);
+}
+.settings-theme-card.active {
+  border-color: var(--link-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-color) 18%, transparent);
+}
+.settings-theme-card.active .theme-name { color: var(--link-color); }
+.theme-preview {
+  --tp-bg: #ffffff;
+  --tp-accent: #999999;
+  --tp-text: #d5d5d5;
+  display: block;
+  height: 64px;
+  padding: 10px 12px;
+  border: 1px solid rgba(127, 127, 127, .22);
+  border-radius: var(--radius-sm);
+  background: var(--tp-bg);
+  overflow: hidden;
+}
+.theme-preview[data-theme-preview='elegant'] { --tp-bg: #f0edea; --tp-accent: #c44b2b; --tp-text: #ddd6cd; }
+.theme-preview[data-theme-preview='light'] { --tp-bg: #ffffff; --tp-accent: #0969da; --tp-text: #e2e6ea; }
+.theme-preview[data-theme-preview='dark'] { --tp-bg: #0d1117; --tp-accent: #58a6ff; --tp-text: #30363d; }
+.theme-preview[data-theme-preview='newsprint'] { --tp-bg: #f5f2eb; --tp-accent: #2c5f8a; --tp-text: #e0dacb; }
+.theme-preview[data-theme-preview='custom'] {
+  --tp-accent: var(--link-color);
+  --tp-text: color-mix(in srgb, var(--text-color) 16%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-color) 100%, transparent), color-mix(in srgb, var(--link-color) 14%, var(--bg-color)));
+}
+.theme-preview i { display: block; border-radius: 2px; }
+.theme-preview .tp-title { width: 42%; height: 6px; margin-bottom: 9px; background: var(--tp-accent); }
+.theme-preview .tp-line { width: 86%; height: 4px; margin-bottom: 6px; background: var(--tp-text); }
+.theme-preview .tp-line.short { width: 58%; }
+
+/* 滑杆美化 */
+.settings-grid label input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-color) 14%, transparent);
+  cursor: pointer;
+}
+.settings-grid label input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg-color);
+  border-radius: 50%;
+  background: var(--link-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+  transition: transform .12s ease;
+}
+.settings-grid label input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.18); }
+.settings-grid label input[type='range']:active::-webkit-slider-thumb { transform: scale(1.05); }
+
+@media (max-width: 600px) {
+  .settings-body { grid-template-columns: 1fr; }
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+    padding: 10px 12px;
+  }
+  .settings-content { padding: 4px 16px 20px; }
+}
+
+/* === 设置对话框：可拖动卡片 + 半透明穿透，实时预览设置变化 === */
+.settings-overlay {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+.settings-dialog {
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--bg-color) 84%, transparent);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  animation: colamd-float-in .15s ease-out;
+}
+.settings-header {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.settings-header:active { cursor: grabbing; }
+.settings-header .settings-close { cursor: pointer; }
+.settings-nav {
+  background: color-mix(in srgb, var(--text-color) 4%, transparent);
+}
+
+/* 公式弹窗拖动加固 */
+.math-modal-header { touch-action: none; }
+
+/* === 设置对话框：固定高度，切换分区不再抖动 === */
+.settings-dialog {
+  display: flex;
+  flex-direction: column;
+  height: min(600px, calc(100vh - 32px));
+}
+.settings-dialog .settings-header { flex: none; }
+.settings-dialog .settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+.settings-dialog .settings-content {
+  height: 100%;
+  max-height: none;
+  overflow-y: auto;
+}
+.settings-dialog .settings-nav {
+  max-height: 100%;
+  overflow-y: auto;
+}

@@ -4,6 +4,13 @@ Notable user-visible changes are documented here. The project follows semantic v
 
 ## Unreleased
 
+## 0.2.4 - 2026-08-14
+
+- Redesigned Settings with section navigation, visual theme cards, and refined sliders.
+- Made the Settings panel draggable and translucent so appearance changes can be previewed against the document.
+- Made the LaTeX formula editor draggable, added a compact close control, and kept the document visible while editing.
+- Unified contextual menus and floating surfaces with smoother motion, spacing, and visual states.
+
 ## 0.2.3 - 2026-08-13
 
 - Registered QuillMesh as a Windows handler for `.md`, `.markdown`, `.mdown`, and `.mkd` files.

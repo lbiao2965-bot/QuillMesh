@@ -154,9 +154,45 @@ async function applyThemeSetting(theme: string): Promise<void> {
   } else applyTheme(theme)
 }
 
+const builtinThemes = ['elegant', 'light', 'dark', 'newsprint']
+
+function ensureThemeCards(): HTMLButtonElement[] {
+  const host = document.getElementById('settings-theme-cards') as HTMLElement | null
+  if (!host) return []
+  const ids = [...builtinThemes]
+  if (appSettings.theme.startsWith('custom:')) ids.push(appSettings.theme)
+  const cards: HTMLButtonElement[] = []
+  for (const id of ids) {
+    let card = host.querySelector<HTMLButtonElement>(`.settings-theme-card[data-theme-id="${CSS.escape(id)}"]`)
+    if (!card) {
+      card = document.createElement('button')
+      card.type = 'button'
+      card.className = 'settings-theme-card'
+      card.dataset.themeId = id
+      card.setAttribute('role', 'radio')
+      const preview = document.createElement('span')
+      preview.className = 'theme-preview'
+      preview.dataset.themePreview = id.startsWith('custom:') ? 'custom' : id
+      preview.innerHTML = '<i class="tp-title"></i><i class="tp-line"></i><i class="tp-line short"></i>'
+      const name = document.createElement('span')
+      name.className = 'theme-name'
+      card.append(preview, name)
+      card.addEventListener('click', () => { void updateSettings({ theme: id }) })
+      host.appendChild(card)
+    }
+    const label = id.startsWith('custom:') ? id.slice(7) : t(id as 'elegant' | 'light' | 'dark' | 'newsprint')
+    ;(card.querySelector('.theme-name') as HTMLElement).textContent = label
+    card.setAttribute('aria-label', label)
+    cards.push(card)
+  }
+  for (const card of [...host.querySelectorAll<HTMLElement>('.settings-theme-card')]) {
+    if (!ids.includes(card.dataset.themeId!)) card.remove()
+  }
+  return cards
+}
+
 function syncSettingsControls(): void {
   const controls = {
-    theme: document.getElementById('settings-theme') as HTMLSelectElement | null,
     font: document.getElementById('settings-font') as HTMLSelectElement | null,
     fontSize: document.getElementById('settings-font-size') as HTMLInputElement | null,
     lineHeight: document.getElementById('settings-line-height') as HTMLInputElement | null,
@@ -165,13 +201,13 @@ function syncSettingsControls(): void {
     statusBar: document.getElementById('settings-statusbar') as HTMLInputElement | null,
     codex: document.getElementById('settings-codex') as HTMLInputElement | null,
   }
-  if (!controls.theme) return
-  if (![...controls.theme.options].some((option) => option.value === appSettings.theme)) {
-    const option = new Option(appSettings.theme.replace(/^custom:/, ''), appSettings.theme)
-    controls.theme.add(option)
+  if (!controls.font) return
+  for (const card of ensureThemeCards()) {
+    const active = card.dataset.themeId === appSettings.theme
+    card.classList.toggle('active', active)
+    card.setAttribute('aria-checked', String(active))
   }
-  controls.theme.value = appSettings.theme
-  controls.font!.value = appSettings.editorFont
+  controls.font.value = appSettings.editorFont
   controls.fontSize!.value = String(appSettings.fontSize)
   controls.lineHeight!.value = String(appSettings.lineHeight)
   controls.width!.value = appSettings.contentWidth
@@ -184,11 +220,13 @@ function syncSettingsControls(): void {
 
 async function refreshFileAssociationStatus(): Promise<void> {
   const section = document.getElementById('settings-files-section') as HTMLElement
+  const navItem = document.getElementById('settings-nav-files') as HTMLElement | null
   const statusElement = document.getElementById('settings-default-app-status') as HTMLElement
   statusElement.textContent = t('checkingDefaultApp')
   try {
     const status = await window.electronAPI.getFileAssociationStatus()
     section.hidden = !status.supported
+    if (navItem) navItem.hidden = !status.supported
     if (!status.supported) return
     statusElement.textContent = status.isDefault
       ? t('defaultAppActive')
@@ -197,6 +235,7 @@ async function refreshFileAssociationStatus(): Promise<void> {
         : t('defaultAppInactive')
   } catch {
     section.hidden = true
+    if (navItem) navItem.hidden = true
   }
 }
 
@@ -204,10 +243,39 @@ function openSettings(): void {
   hideMenus()
   syncSettingsControls()
   settingsOverlayEl().hidden = false
-  ;(document.getElementById('settings-theme') as HTMLSelectElement).focus()
+  const activeCard = document.querySelector<HTMLElement>('.settings-theme-card.active') ?? document.querySelector<HTMLElement>('.settings-theme-card')
+  activeCard?.focus()
   void refreshFileAssociationStatus()
 }
 function closeSettings(): void { settingsOverlayEl().hidden = true }
+function makeDialogDraggable(handle: HTMLElement, card: HTMLElement): void {
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    if ((e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
+    const rect = card.getBoundingClientRect()
+    card.style.position = 'absolute'
+    card.style.left = `${rect.left}px`
+    card.style.top = `${rect.top}px`
+    card.style.margin = '0'
+    const offsetX = e.clientX - rect.left
+    const offsetY = e.clientY - rect.top
+    const onMove = (ev: PointerEvent) => {
+      const x = Math.min(Math.max(ev.clientX - offsetX, 8), window.innerWidth - rect.width - 8)
+      const y = Math.min(Math.max(ev.clientY - offsetY, 8), window.innerHeight - rect.height - 8)
+      card.style.left = `${x}px`
+      card.style.top = `${y}px`
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('pointerup', onUp, true)
+      window.removeEventListener('pointercancel', onUp, true)
+    }
+    window.addEventListener('pointermove', onMove, true)
+    window.addEventListener('pointerup', onUp, true)
+    window.addEventListener('pointercancel', onUp, true)
+  })
+}
 async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
   const next = await window.electronAPI.updateAppSettings(patch)
   applyAppSettings(next)
@@ -1327,13 +1395,19 @@ async function init(): Promise<void> {
   ;(document.getElementById('settings-btn') as HTMLButtonElement).addEventListener('click', openSettings)
   ;(document.getElementById('welcome-settings-btn') as HTMLButtonElement).addEventListener('click', openSettings)
   ;(document.getElementById('settings-close') as HTMLButtonElement).addEventListener('click', closeSettings)
-  settingsOverlayEl().addEventListener('mousedown', (event) => { if (event.target === settingsOverlayEl()) closeSettings() })
+  makeDialogDraggable(document.querySelector<HTMLElement>('#settings-dialog .settings-header') as HTMLElement, document.getElementById('settings-dialog') as HTMLElement)
   ;(document.getElementById('settings-default-app-btn') as HTMLButtonElement).addEventListener('click', async () => {
     const opened = await api.openDefaultAppsSettings()
     ;(document.getElementById('settings-default-app-note') as HTMLElement).textContent = opened ? t('defaultAppInstructions') : t('defaultAppsOpenFailed')
   })
   window.addEventListener('focus', () => { if (!settingsOverlayEl().hidden) void refreshFileAssociationStatus() })
-  ;(document.getElementById('settings-theme') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ theme: (event.currentTarget as HTMLSelectElement).value }) })
+  for (const navItem of document.querySelectorAll<HTMLButtonElement>('.settings-nav-item')) {
+    navItem.addEventListener('click', () => {
+      const section = navItem.dataset.section
+      for (const item of document.querySelectorAll<HTMLElement>('.settings-nav-item')) item.classList.toggle('active', item === navItem)
+      for (const panel of document.querySelectorAll<HTMLElement>('.settings-section[data-section]')) panel.classList.toggle('active', panel.dataset.section === section)
+    })
+  }
   ;(document.getElementById('settings-font') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ editorFont: (event.currentTarget as HTMLSelectElement).value as AppSettings['editorFont'] }) })
   ;(document.getElementById('settings-width') as HTMLSelectElement).addEventListener('change', (event) => { void updateSettings({ contentWidth: (event.currentTarget as HTMLSelectElement).value as AppSettings['contentWidth'] }) })
   const fontSizeControl = document.getElementById('settings-font-size') as HTMLInputElement
@@ -1478,6 +1552,10 @@ function refreshStaticLabels(): void {
   ;(document.getElementById('settings-default-app-btn') as HTMLElement).textContent = t('manageDefaultApps')
   ;(document.getElementById('settings-default-app-note') as HTMLElement).textContent = t('defaultAppInstructions')
   ;(document.getElementById('settings-integrations-title') as HTMLElement).textContent = t('integrations')
+  ;(document.getElementById('settings-nav-appearance') as HTMLElement).textContent = t('appearance')
+  ;(document.getElementById('settings-nav-editor') as HTMLElement).textContent = t('editorSettings')
+  ;(document.getElementById('settings-nav-files') as HTMLElement).textContent = t('filesSettings')
+  ;(document.getElementById('settings-nav-integrations') as HTMLElement).textContent = t('integrations')
   ;(document.getElementById('settings-theme-label') as HTMLElement).textContent = t('theme')
   ;(document.getElementById('settings-font-label') as HTMLElement).textContent = t('editorFont')
   ;(document.getElementById('settings-font-size-label') as HTMLElement).textContent = t('fontSize')

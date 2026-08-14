@@ -1,5 +1,6 @@
 import { getEditorView } from './editor'
 import { t } from '../i18n'
+import { iconSvg } from '../icons'
 import katex from 'katex'
 
 function normalizeFormulaInput(input: string): string {
@@ -14,6 +15,7 @@ function normalizeFormulaInput(input: string): string {
 
 export class MathModal {
   private container: HTMLDivElement
+  private modal!: HTMLDivElement
   private input: HTMLTextAreaElement
   private isBlockCheckbox: HTMLInputElement
   private header: HTMLHeadingElement
@@ -31,8 +33,18 @@ export class MathModal {
 
     const modal = document.createElement('div')
     modal.className = 'math-modal'
+    this.modal = modal
 
     this.header = document.createElement('h3')
+    const closeButton = document.createElement('button')
+    closeButton.type = 'button'
+    closeButton.className = 'math-modal-close'
+    closeButton.innerHTML = iconSvg('x', 13)
+    closeButton.addEventListener('click', () => this.hide())
+    const headerBar = document.createElement('div')
+    headerBar.className = 'math-modal-header'
+    headerBar.append(this.header, closeButton)
+    this.makeDraggable(headerBar)
 
     this.input = document.createElement('textarea')
     this.input.className = 'math-modal-input'
@@ -75,14 +87,10 @@ export class MathModal {
     this.saveButton.addEventListener('click', () => this.save())
 
     footer.append(this.cancelButton, this.saveButton)
-    modal.append(this.header, this.input, previewSection, options, footer)
+    modal.append(headerBar, this.input, previewSection, options, footer)
     this.container.appendChild(modal)
     this.applyLanguage()
     window.addEventListener('colamd-language-changed', () => this.applyLanguage())
-
-    this.container.addEventListener('mousedown', (e) => {
-      if (e.target === this.container) this.hide()
-    })
 
     this.container.addEventListener('keydown', (e) => {
       e.stopPropagation()
@@ -133,6 +141,35 @@ export class MathModal {
     }
     const view = getEditorView()
     if (view) view.focus()
+  }
+
+  private makeDraggable(handle: HTMLElement): void {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return
+      if ((e.target as HTMLElement).closest('button')) return
+      e.preventDefault()
+      const rect = this.modal.getBoundingClientRect()
+      this.modal.style.position = 'absolute'
+      this.modal.style.left = `${rect.left}px`
+      this.modal.style.top = `${rect.top}px`
+      this.modal.style.margin = '0'
+      const offsetX = e.clientX - rect.left
+      const offsetY = e.clientY - rect.top
+      const onMove = (ev: PointerEvent) => {
+        const x = Math.min(Math.max(ev.clientX - offsetX, 8), window.innerWidth - rect.width - 8)
+        const y = Math.min(Math.max(ev.clientY - offsetY, 8), window.innerHeight - rect.height - 8)
+        this.modal.style.left = `${x}px`
+        this.modal.style.top = `${y}px`
+      }
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove, true)
+        window.removeEventListener('pointerup', onUp, true)
+        window.removeEventListener('pointercancel', onUp, true)
+      }
+      window.addEventListener('pointermove', onMove, true)
+      window.addEventListener('pointerup', onUp, true)
+      window.addEventListener('pointercancel', onUp, true)
+    })
   }
 
   private renderPreview(): void {
