@@ -2454,3 +2454,249 @@ body:not(.codex-enabled) #document-tabs { padding-right: 144px; }
   max-height: 100%;
   overflow-y: auto;
 }
+
+/* === 公式弹窗：跟随编辑器字号整体缩放 === */
+.math-modal {
+  width: 30em;
+  padding: 1.25em;
+  gap: 0.875em;
+  font-size: var(--editor-font-size, 16px);
+}
+.math-modal h3 { font-size: 1em; }
+.math-modal-header { margin: -0.25em -0.25em 0; padding: 0.125em 0.125em 0 0.25em; }
+.math-modal-close { width: 1.5em; height: 1.5em; }
+.math-modal-input { padding: 0.75em; font-size: 0.875em; }
+.math-modal-preview-section { gap: 0.375em; }
+.math-modal-preview-label { font-size: 0.75em; }
+.math-modal-preview { min-height: 5.25em; padding: 0.75em 1em; }
+.math-modal-preview.empty,
+.math-modal-preview.error { font-size: 0.8125em; }
+.math-modal-options { gap: 0.5em; font-size: 0.8125em; }
+.math-modal-footer { gap: 0.625em; margin-top: 0.25em; }
+.math-modal-btn { padding: 0.45em 1.15em; font-size: 0.8125em; }
+
+/* === 公式输入助手：符号面板 / 模板 / 自动补全 / 收藏 === */
+.math-modal { position: relative; }
+
+.math-assistant { display: flex; flex-direction: column; gap: 0.375em; }
+
+.math-assistant-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.math-assistant-tab {
+  padding: 0.25em 0.625em;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 58%, transparent);
+  font: 500 0.75em/1.5 var(--font-ui);
+  cursor: pointer;
+  transition: color .12s ease, background-color .12s ease;
+}
+.math-assistant-tab:hover {
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+}
+.math-assistant-tab.active {
+  color: var(--link-color);
+  background: color-mix(in srgb, var(--link-color) 12%, transparent);
+}
+
+.math-assistant-panel {
+  max-height: 9.5em;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: var(--radius-md);
+  padding: 0.375em;
+  background: color-mix(in srgb, var(--text-color) 3%, transparent);
+}
+.math-assistant-panel[hidden] { display: none; }
+
+.math-symbol-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.1em, 1fr));
+  gap: 2px;
+}
+.math-symbol-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.9em;
+  padding: 0 0.25em;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 80%, transparent);
+  font-size: 0.875em;
+  cursor: pointer;
+  transition: color .12s ease, background-color .12s ease;
+}
+.math-symbol-btn:hover {
+  color: var(--link-color);
+  background: color-mix(in srgb, var(--link-color) 10%, transparent);
+}
+
+.math-chip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0.125em 0.25em;
+  border-radius: var(--radius-sm);
+}
+.math-chip:hover { background: color-mix(in srgb, var(--text-color) 6%, transparent); }
+.math-chip-insert {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.25em 0.375em;
+}
+.math-chip-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 45%, transparent);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, color .12s ease, background-color .12s ease;
+}
+.math-chip:hover .math-chip-remove { opacity: 1; }
+.math-chip-remove:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+.math-assistant-empty {
+  padding: 0.75em;
+  color: var(--text-muted);
+  font-size: 0.8125em;
+  text-align: center;
+}
+
+/* 自动补全下拉 */
+.math-suggest {
+  position: absolute;
+  z-index: 10;
+  min-width: 11em;
+  max-height: 15em;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--bg-color);
+  box-shadow: var(--shadow-md);
+  animation: colamd-float-in .1s ease-out;
+}
+.math-suggest[hidden] { display: none; }
+.math-suggest-item {
+  padding: 0.3em 0.625em;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: 0.8125em;
+  text-align: left;
+  cursor: pointer;
+}
+.math-suggest-item:hover { background: color-mix(in srgb, var(--text-color) 7%, transparent); }
+.math-suggest-item.active {
+  background: color-mix(in srgb, var(--link-color) 12%, transparent);
+  color: var(--link-color);
+}
+
+/* 收藏按钮 */
+.math-modal-options { justify-content: flex-start; }
+.math-fav-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+  height: 1.75em;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in srgb, var(--text-color) 50%, transparent);
+  cursor: pointer;
+  transition: color .12s ease, background-color .12s ease;
+}
+.math-fav-btn:hover {
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+}
+.math-fav-btn.active { color: #e8a33d; }
+.math-fav-btn.active svg { fill: currentColor; }
+
+/* === 公式助手：按钮 KaTeX 渲染 + 悬停放大预览 === */
+.math-symbol-grid { grid-template-columns: repeat(auto-fill, minmax(2.4em, 1fr)); }
+.math-symbol-btn {
+  min-height: 2.2em;
+  padding: 0.15em 0.3em;
+  line-height: 1;
+}
+.math-symbol-btn .katex { font-size: 1em; color: inherit; }
+
+.math-symbol-tip {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25em;
+  max-width: 90%;
+  padding: 0.5em 0.875em;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-color);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  animation: colamd-float-in .1s ease-out;
+}
+.math-symbol-tip[hidden] { display: none; }
+.math-symbol-tip-render { line-height: 1.2; }
+.math-symbol-tip-render .katex { font-size: 1.4em; }
+.math-symbol-tip-cmd {
+  font-family: var(--font-mono);
+  font-size: 0.6875em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 收藏/最近条文的 KaTeX 缩略渲染 */
+.math-chip-insert { display: inline-flex; align-items: center; min-height: 1.6em; }
+.math-chip-insert .katex { font-size: 1em; white-space: nowrap; }
+
+/* === 公式助手：按钮防溢出 + 星标移到标题栏 === */
+.math-modal-header { gap: 6px; }
+.math-modal-header h3 { flex: 1 1 auto; }
+.math-modal-header .math-fav-btn { margin-left: 0; flex: none; }
+.math-modal-header .math-modal-close { flex: none; }
+
+.math-symbol-grid { grid-template-columns: repeat(auto-fill, minmax(2.8em, 1fr)); }
+.math-symbol-btn {
+  height: 2.4em;
+  min-height: 0;
+  overflow: hidden;
+}
+.math-symbol-btn.wide { grid-column: span 2; }
+.math-symbol-btn .katex { font-size: 0.78em; }
+
+/* 公式弹窗加宽，模板页一行放更多按钮 */
+.math-modal { width: 34em; }

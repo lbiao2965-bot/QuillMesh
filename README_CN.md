@@ -4,7 +4,7 @@
 
 [English](README.md) · **简体中文**
 
-[![Release](https://img.shields.io/github/v/release/lbiao2965-bot/QuillMesh?include_prereleases\&label=preview)](https://github.com/lbiao2965-bot/QuillMesh/releases)\
+<a href="https://github.com/lbiao2965-bot/QuillMesh/releases"><img src="https://img.shields.io/github/v/release/lbiao2965-bot/QuillMesh?include_prereleases&amp;label=preview" alt="Release" width="142"></a>\
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)\
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#从源码运行)
 
@@ -14,7 +14,7 @@
 
 QuillMesh 将接近 Typora 的所见即所得体验带到普通 Markdown 文件中，集写作、文档导航、公式、表格、图片、导出和外部修改保护于一个桌面应用。它直接读写 `.md` 文件，不创建私有文档格式，也不要求把内容保存到云端。
 
-> 当前开发版本：`0.2.4`。QuillMesh 仍是早期预览版，兼容性和交互细节会继续完善。
+> 当前开发版本：`0.2.5`。QuillMesh 仍是早期预览版，兼容性和交互细节会继续完善。
 
 ## 为什么选择 QuillMesh
 
@@ -41,7 +41,7 @@ Markdown 正在成为人、脚本和 AI Agent 之间的共享文件。一份文�
 * 全屏顶部栏，支持 `Esc` 和 `F11` 退出全屏。
 
 <p align="center">
-  <img src="assets/文件编辑.png" alt="QuillMesh 文档编辑、大纲与多标签页" width="1000">
+  <img src="assets/文件编辑.png" alt="QuillMesh 文档编辑、大纲与多标签页" width="618">
 </p>
 
 ### 表格、代码与快速插入
@@ -59,6 +59,9 @@ Markdown 正在成为人、脚本和 AI Agent 之间的共享文件。一份文�
 
 * 通过 KaTeX 渲染行内公式和居中块公式。
 * 编辑 LaTeX 时实时预览结果。
+* 提供常用符号、希腊字母、集合逻辑和微积分运算符面板。
+* 提供分数、根式、矩阵、分段函数和方程组等可复用模板。
+* 支持 LaTeX 命令自动补全、选区感知插入、公式收藏与最近使用记录。
 * 可选的块公式自动编号。
 * HTML、PDF、PNG 和 DOCX 导出保留公式内容。
 

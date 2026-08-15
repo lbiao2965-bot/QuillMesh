@@ -1,6 +1,6 @@
 {
   "name": "quillmesh",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "A local-first Markdown editor built for people and AI agents",
   "private": true,
   "main": "dist/main/index.js",
