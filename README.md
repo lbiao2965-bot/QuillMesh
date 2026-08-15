@@ -14,7 +14,7 @@
 
 QuillMesh brings a calm, Typora-inspired WYSIWYG experience to ordinary Markdown files. It combines rich editing, document navigation, formulas, tables, images, export, and revision-safe coordination with external tools—without introducing a proprietary document format or requiring cloud storage.
 
-> Current development version: `0.2.4`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
+> Current development version: `0.2.5`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
 
 ## What makes QuillMesh different
 
@@ -59,6 +59,9 @@ The result is a Markdown editor that remains pleasant for normal writing while b
 
 - Inline math and centered display math through KaTeX.
 - Live preview while editing LaTeX.
+- Visual palettes for common symbols, Greek letters, set and logic notation, and calculus operators.
+- Reusable formula templates for fractions, roots, matrices, piecewise functions, and equation systems.
+- LaTeX command autocomplete, selection-aware insertion, favorites, and recent-formula history.
 - Optional automatic numbering for block equations.
 - Formula-aware HTML, PDF, PNG, and DOCX export.
 

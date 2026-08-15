@@ -30,6 +30,8 @@ const { isEditorPresentationAttribute, isEditorPresentationClass } = loadTypeScr
 const { markdownSectionAtLine, sourceSelectionContext } = loadTypeScript('../src/renderer/codex-context.ts')
 const { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings } = loadTypeScript('../src/shared/settings.ts')
 const { isQuillMeshProgId, markdownLaunchPaths, parseRegistryDefaultValue, parseRegistryProgId } = loadTypeScript('../src/main/file-association.ts')
+const { autocompleteCommands, snippetCursorIndex, symbolData, symbolTabs, withoutSnippetCursor } = loadTypeScript('../src/renderer/editor/math-symbols.ts')
+const katex = require('katex')
 
 const cleanA = revisionFor('# A\n', 1000, 4)
 const cleanB = revisionFor('# B\n', 1000, 4)
@@ -185,4 +187,22 @@ assert.equal(isQuillMeshProgId('QuillMesh.Markdown'), true)
 assert.equal(isQuillMeshProgId('Applications\\QuillMesh.exe'), true)
 assert.equal(isQuillMeshProgId('Typora.md'), false)
 
-console.log('document-session regression: persistence, settings, file associations, split sync, outline boundaries, and Codex context passed')
+// Formula-assistant data remains deterministic, autocomplete never repeats a
+// command, and every visible symbol/template has valid KaTeX preview markup.
+assert.deepEqual(symbolTabs.slice(-2), ['favorites', 'recent'])
+assert.equal(new Set(autocompleteCommands).size, autocompleteCommands.length)
+assert.equal(snippetCursorIndex('\\|{|}\\|'), 3)
+assert.equal(withoutSnippetCursor('\\|{|}\\|'), '\\|{}\\|')
+assert.equal(snippetCursorIndex('|{|}|'), 2)
+assert.equal(withoutSnippetCursor('|{|}|'), '|{}|')
+for (const items of Object.values(symbolData)) {
+  for (const item of items) {
+    assert.ok(item.latex.length > 0)
+    assert.equal(snippetCursorIndex(withoutSnippetCursor(item.latex)), -1, item.latex)
+    const preview = item.demo ?? withoutSnippetCursor(item.latex)
+    assert.doesNotThrow(() => katex.renderToString(preview, { throwOnError: true }))
+    if (item.compact) assert.doesNotThrow(() => katex.renderToString(item.compact, { throwOnError: true }))
+  }
+}
+
+console.log('document-session regression: persistence, settings, file associations, split sync, outline boundaries, Codex context, and formula assistant passed')

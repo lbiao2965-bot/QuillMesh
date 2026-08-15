@@ -4,6 +4,13 @@ Notable user-visible changes are documented here. The project follows semantic v
 
 ## Unreleased
 
+## 0.2.5 - 2026-08-15
+
+- Added a visual formula input assistant with common symbols, Greek letters, set and logic notation, calculus operators, and reusable templates.
+- Added LaTeX command autocomplete, including shortcuts such as `\alp` to `\alpha`.
+- Added formula favorites and a recent-formula history for quickly reusing expressions.
+- Added rendered symbol previews and selection-aware template insertion inside the existing live formula editor.
+
 ## 0.2.4 - 2026-08-14
 
 - Redesigned Settings with section navigation, visual theme cards, and refined sliders.
