@@ -143,6 +143,22 @@ const headingCollapsePlugin = $prose(() => new Plugin({
   },
 }))
 
+export const commentMarkPluginKey = new PluginKey<DecorationSet>('comment-marks')
+
+const commentMarkPlugin = $prose(() => new Plugin({
+  key: commentMarkPluginKey,
+  state: {
+    init: () => DecorationSet.empty,
+    apply(transaction, previous) {
+      const replacement = transaction.getMeta(commentMarkPluginKey) as DecorationSet | undefined
+      return replacement ?? previous.map(transaction.mapping, transaction.doc)
+    },
+  },
+  props: {
+    decorations(state) { return commentMarkPluginKey.getState(state) ?? DecorationSet.empty },
+  },
+}))
+
 const documentChangePlugin = $prose(() => new Plugin({
   appendTransaction(transactions) {
     if (transactions.some((transaction) => transaction.docChanged)) {
@@ -995,6 +1011,7 @@ export async function createEditor(
     .use(mathEditorPlugin)
     .use(documentChangePlugin)
     .use(headingCollapsePlugin)
+    .use(commentMarkPlugin)
     .use(searchHighlight)
     .use(activeBlockPlugin)
     .create()
@@ -1173,4 +1190,52 @@ export function revealMarkdownLocation(heading?: string, line?: number): boolean
   target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   target.animate([{ backgroundColor: 'color-mix(in srgb, var(--accent, #146b8c) 24%, transparent)' }, { backgroundColor: 'transparent' }], { duration: 1100 })
   return true
+}
+
+// ---------- 批注 / 审阅高亮 ----------
+
+export interface CommentMarkRange { from: number; to: number; kind: 'comment' | 'suggestion' }
+
+export function applyCommentMarks(ranges: CommentMarkRange[]): void {
+  const view = getEditorView()
+  if (!view) return
+  const size = view.state.doc.content.size
+  const decorations = ranges
+    .filter((range) => range.to > range.from && range.from >= 0 && range.to <= size)
+    .map((range) => Decoration.inline(range.from, range.to, { class: `quill-mark quill-mark-${range.kind}` }))
+  view.dispatch(view.state.tr.setMeta(commentMarkPluginKey, DecorationSet.create(view.state.doc, decorations)))
+}
+
+/**
+ * 在 ProseMirror 文档纯文本中定位锚点。
+ * 文本节点直接拼接（与 textBetween 默认行为一致），命中后映射回文档位置。
+ */
+export function locatePlainTextRange(anchor: string, prefix: string, suffix: string): { from: number; to: number } | null {
+  const view = getEditorView()
+  if (!view || !anchor) return null
+  const segments: Array<{ text: string; pos: number }> = []
+  view.state.doc.descendants((node, pos) => {
+    if (node.isText && node.text) segments.push({ text: node.text, pos })
+    return true
+  })
+  const full = segments.map((segment) => segment.text).join('')
+  let best: { from: number; score: number } | null = null
+  let index = full.indexOf(anchor)
+  while (index !== -1) {
+    let score = 1
+    if (prefix && full.slice(Math.max(0, index - prefix.length), index) === prefix) score += 2
+    if (suffix && full.slice(index + anchor.length, index + anchor.length + suffix.length) === suffix) score += 2
+    if (!best || score > best.score) best = { from: index, score }
+    index = full.indexOf(anchor, index + 1)
+  }
+  if (!best) return null
+  const mapIndex = (target: number): number => {
+    let offset = 0
+    for (const segment of segments) {
+      if (target <= offset + segment.text.length) return segment.pos + (target - offset)
+      offset += segment.text.length
+    }
+    return view.state.doc.content.size
+  }
+  return { from: mapIndex(best.from), to: mapIndex(best.from + anchor.length) }
 }

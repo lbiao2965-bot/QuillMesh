@@ -9,6 +9,7 @@ import { languageFromLocale, normalizeLanguage, translate, type AppLanguage, typ
 import { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings, type AppSettings } from '../shared/settings'
 import { renderDocx, renderPdf, renderPng } from './document-export'
 import { startCodexBridge } from './codex-bridge'
+import { loadAnnotations, saveAnnotations } from './annotations'
 import { isQuillMeshProgId, markdownLaunchPaths, parseRegistryDefaultValue, parseRegistryProgId, type FileAssociationStatus } from './file-association'
 import {
   createDocumentId,
@@ -1057,6 +1058,24 @@ ipcMain.handle('load-custom-theme', async (event) => {
   try { const name = basename(result.filePaths[0]); await copyFile(result.filePaths[0], join(themesDir, name)); return { name, css: await readFile(join(themesDir, name), 'utf-8') } } catch { return null }
 })
 ipcMain.handle('load-theme-css', async (_event, fileName: string) => { try { return await readFile(join(themesDir, basename(fileName)), 'utf-8') } catch { return null } })
+ipcMain.handle('load-annotations', async (event, documentId: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof documentId !== 'string') return { version: 1, comments: [], suggestions: [] }
+  const document = getState(win).documents.get(documentId)
+  return loadAnnotations(document?.path ?? null)
+})
+ipcMain.handle('save-annotations', async (event, documentId: unknown, data: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof documentId !== 'string' || !data || typeof data !== 'object') return false
+  const document = getState(win).documents.get(documentId)
+  if (!document?.path) return false
+  const payload = data as { comments?: unknown[]; suggestions?: unknown[] }
+  return queuePathWrite(`annotations:${document.path}`, () => saveAnnotations(document.path, {
+    version: 1,
+    comments: Array.isArray(payload.comments) ? payload.comments : [],
+    suggestions: Array.isArray(payload.suggestions) ? payload.suggestions : [],
+  }))
+})
 
 function sendToFocused(channel: string, ...args: unknown[]): void { BrowserWindow.getFocusedWindow()?.webContents.send(channel, ...args) }
 
@@ -1071,11 +1090,12 @@ function buildMenu(): void {
       command(t('newFile'), 'file.new', 'CmdOrCtrl+N'), command(t('open'), 'file.open', 'CmdOrCtrl+O'), { type: 'separator' },
       command(t('save'), 'file.save', 'CmdOrCtrl+S'), command(t('saveAs'), 'file.saveAs', 'CmdOrCtrl+Shift+S'), command(t('closeTab'), 'file.closeTab', 'CmdOrCtrl+W'), { type: 'separator' },
       { label: t('export'), submenu: [command(t('exportPdf'), 'file.export.pdf'), command(t('exportImage'), 'file.export.png'), command(t('exportHtml'), 'file.export.html'), { type: 'separator' }, command(t('exportWord'), 'file.export.docx')] },
+      { type: 'separator' }, command(t('settings'), 'app.settings', 'CmdOrCtrl+,'),
       ...(!isMac ? [{ type: 'separator' as const }, { role: 'quit' as const, label: t('quit') }] : []),
     ] },
     { label: t('edit'), submenu: [
       { role: 'undo', label: t('undo') }, { role: 'redo', label: t('redo') }, { type: 'separator' }, { role: 'cut', label: t('cut') }, { role: 'copy', label: t('copy') }, { role: 'paste', label: t('paste') }, { role: 'selectAll', label: t('selectAll') }, { type: 'separator' },
-      command(t('find'), 'editor.search', 'CmdOrCtrl+F'), command(t('commandPalette'), 'editor.palette', 'CmdOrCtrl+Shift+P'), command(t('insertFormula'), 'editor.math', 'CmdOrCtrl+Shift+E'), { type: 'separator' }, command(t('settings'), 'app.settings', 'CmdOrCtrl+,'),
+      command(t('find'), 'editor.search', 'CmdOrCtrl+F'), command(t('commandPalette'), 'editor.palette', 'CmdOrCtrl+Shift+P'), command(t('insertFormula'), 'editor.math', 'CmdOrCtrl+Shift+E'), { type: 'separator' }, command(t('reviewMode'), 'view.review'),
     ] },
     { label: t('format'), submenu: [
       command(t('paragraph'), 'format.paragraph', 'CmdOrCtrl+Alt+0'), { label: t('heading'), submenu: [1, 2, 3, 4, 5, 6].map((level) => command(t(`heading${level}` as TranslationKey), `format.heading-${level}`, `CmdOrCtrl+${level}`)) }, { type: 'separator' },

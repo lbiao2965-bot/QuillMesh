@@ -25,6 +25,9 @@ Thumbs.db
 .vscode/
 log.md
 
+# Per-document QuillMesh review data
+.quillmesh/
+
 # Local configuration and secrets
 .env
 .env.*
