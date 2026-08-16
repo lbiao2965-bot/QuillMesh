@@ -4,6 +4,8 @@ Notable user-visible changes are documented here. The project follows semantic v
 
 ## Unreleased
 
+- Rewrote the English and Chinese project documentation around the product artwork, current workflows, review mode, and platform downloads.
+
 ## 0.2.6 - 2026-08-17
 
 - Added a review mode with document-anchored comments, open/resolved filters, and highlighted comment ranges.
