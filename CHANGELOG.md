@@ -4,6 +4,14 @@ Notable user-visible changes are documented here. The project follows semantic v
 
 ## Unreleased
 
+## 0.2.6 - 2026-08-17
+
+- Added a review mode with document-anchored comments, open/resolved filters, and highlighted comment ranges.
+- Stored comments and review suggestions in per-document `.quillmesh` sidecar files so Markdown source remains unchanged.
+- Integrated Codex proposals into the Review panel with explicit Accept and Reject states.
+- Added context-aware annotation re-location after nearby text edits.
+- Updated the English and Chinese documentation and replaced product screenshots with the latest interface.
+
 ## 0.2.5 - 2026-08-15
 
 - Added a visual formula input assistant with common symbols, Greek letters, set and logic notation, calculus operators, and reusable templates.

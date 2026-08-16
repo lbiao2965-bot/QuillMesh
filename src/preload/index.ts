@@ -11,6 +11,9 @@ export interface SaveResult { ok: boolean; cancelled?: boolean; conflict?: { con
 export type ExportFormat = 'pdf' | 'png' | 'html' | 'docx'
 export interface ExportDocumentPayload { title: string; html: string }
 export interface CodexBridgeRequest { requestId: string; action: 'context' | 'locate' | 'proposal' | 'export-html'; payload: Record<string, unknown> }
+export interface AnnotationComment { id: string; anchor: string; prefix: string; suffix: string; text: string; createdAt: number; resolved: boolean }
+export interface AnnotationSuggestion { id: string; anchor: string; prefix: string; suffix: string; replacement: string; title: string; source: 'codex' | 'user'; status: 'pending' | 'accepted' | 'rejected'; createdAt: number }
+export interface AnnotationsData { version: 1; comments: AnnotationComment[]; suggestions: AnnotationSuggestion[] }
 export type CodexSendKind = 'selection' | 'section' | 'document'
 export interface CodexSendPayload { kind: CodexSendKind; path: string | null; displayName: string; selectedText?: string; sectionText?: string; heading: string | null; line: number }
 
@@ -41,6 +44,8 @@ export interface ElectronAPI {
   exportDocument: (format: ExportFormat, document: ExportDocumentPayload) => Promise<boolean>
   loadCustomTheme: () => Promise<{ name: string; css: string } | null>
   loadThemeCSS: (fileName: string) => Promise<string | null>
+  loadAnnotations: (documentId: string) => Promise<AnnotationsData>
+  saveAnnotations: (documentId: string, data: AnnotationsData) => Promise<boolean>
   loadLocalImageForDocument: (documentId: string, source: string) => Promise<string | null>
   saveClipboardImageForDocument: (documentId: string, bytes: Uint8Array, mime: string) => Promise<string | null>
   chooseImageForDocument: (documentId: string) => Promise<string | null>
@@ -109,6 +114,8 @@ const api: ElectronAPI = {
   exportDocument: (format, document) => ipcRenderer.invoke('export-document', format, document),
   loadCustomTheme: () => ipcRenderer.invoke('load-custom-theme'),
   loadThemeCSS: (fileName) => ipcRenderer.invoke('load-theme-css', fileName),
+  loadAnnotations: (documentId) => ipcRenderer.invoke('load-annotations', documentId),
+  saveAnnotations: (documentId, data) => ipcRenderer.invoke('save-annotations', documentId, data),
   loadLocalImageForDocument: (documentId, source) => ipcRenderer.invoke('load-local-image-for-document', documentId, source),
   saveClipboardImageForDocument: (documentId, bytes, mime) => ipcRenderer.invoke('save-clipboard-image-for-document', documentId, bytes, mime),
   chooseImageForDocument: (documentId) => ipcRenderer.invoke('choose-image-for-document', documentId),

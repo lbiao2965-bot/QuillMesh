@@ -1,6 +1,6 @@
 # QuillMesh
 
-**A polished, local-first Markdown editor for focused writing and safe AI collaboration.**
+**A local-first Markdown editor for focused writing, review, and safe AI collaboration.**
 
 **English** · [简体中文](README_CN.md)
 
@@ -8,45 +8,57 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#build-from-source)
 
+QuillMesh brings a calm, Typora-inspired editing experience to ordinary Markdown files. It combines WYSIWYG writing, document navigation, review comments, formulas, tables, images, export, and revision-safe coordination with external tools—without a proprietary document format or mandatory cloud storage.
+
+> Current development version: `0.2.6`. QuillMesh is an early preview; compatibility and interaction details will continue to improve.
+
 <p align="center">
-  <img src="assets/quillmesh-x-launch-v1.png" alt="QuillMesh local-first Markdown editor for people and AI" width="1200">
+  <img src="assets/主页.png" alt="QuillMesh home screen" width="900">
 </p>
 
-QuillMesh brings a calm, Typora-inspired WYSIWYG experience to ordinary Markdown files. It combines rich editing, document navigation, formulas, tables, images, export, and revision-safe coordination with external tools—without introducing a proprietary document format or requiring cloud storage.
+## Why QuillMesh
 
-> Current development version: `0.2.5`. QuillMesh is an early preview; compatibility and interaction details are still evolving.
+Markdown is increasingly shared by people, scripts, and AI agents. A document may be open locally while Codex updates a section or another tool refreshes generated content. QuillMesh treats the file as a shared handoff surface instead of silently overwriting one version with another:
 
-## What makes QuillMesh different
+- clean documents refresh automatically after external writes;
+- overlapping local and external edits open a focused comparison dialog;
+- saves verify the on-disk revision before replacing content;
+- closing a tab or window checks every unsaved document;
+- AI proposals remain visible as reviewed Diffs until accepted or rejected.
 
-Markdown increasingly sits between people, scripts, and AI agents. A document may be open in an editor while Codex updates a section or another tool refreshes generated content. QuillMesh treats the file as a shared handoff surface instead of silently choosing a winner:
+The result is a Markdown editor that feels natural for everyday writing and remains safer when agents or automation participate in the workflow.
 
-- Clean documents refresh automatically after external writes.
-- Overlapping edits open a focused comparison dialog.
-- Saves verify the on-disk revision before replacing content.
-- Unsaved tabs and windows always receive a close check.
-- AI proposals are shown as reviewed Diffs and are written only after acceptance.
-
-The result is a Markdown editor that remains pleasant for normal writing while being much safer in agent-assisted workflows.
-
-## Editing experience
-
-### Focused writing and navigation
+## Write and navigate
 
 - WYSIWYG, source, and synchronized source/preview split modes.
 - Browser-like tabs, recent files, and sibling Markdown browsing.
 - Outline navigation, heading folding, and drag-to-reorder sections.
-- Bold, italic, links, quotes, ordered/unordered/task lists, highlight, and inline code.
-- `Ctrl+Shift+P` command palette, `/` quick insert, and a compact context menu.
+- Bold, italic, links, quotes, ordered, unordered and task lists, highlight, and inline code.
+- `Ctrl+Shift+P` command palette, `/` quick insert, and context-aware menus.
 - Consolidated task view with incomplete-task filtering and jump-to-source behavior.
 - Full-screen toolbar with `Esc` and `F11` exit support.
 
 <p align="center">
-  <img src="assets/文件编辑.png" alt="QuillMesh document editing with outline and tabs" width="1000">
+  <img src="assets/文件编辑.png" alt="QuillMesh document editing and navigation" width="1100">
 </p>
 
-### Tables, code, and quick insertion
+## Review without changing the Markdown
 
-- GFM table editing, whole-table alignment, row/column actions, copy/delete, and draggable column widths.
+Select text and add a comment from the context menu, then manage the discussion in the Review panel. Review data is stored beside the document in `.quillmesh/<filename>.annotations.json`, leaving the Markdown source clean and portable.
+
+- Highlight comment anchors directly in the rendered document.
+- Filter open, resolved, or all comments.
+- Resolve, reopen, or delete comments without touching the Markdown body.
+- Keep Codex suggestions in the same review surface with Accept and Reject actions.
+- Re-locate annotations from their text and surrounding context after nearby edits.
+
+<p align="center">
+  <img src="assets/批注.png" alt="QuillMesh review mode and comment sidebar" width="1100">
+</p>
+
+## Tables, code, links, and insertion
+
+- GFM table editing, whole-table alignment, contextual row and column actions, copy/delete, and draggable column widths.
 - Code-block copy, language selection, and optional line wrapping.
 - Insert images, tables, code blocks, formulas, horizontal rules, or paragraphs above and below.
 - Link hover previews with open and copy actions.
@@ -55,27 +67,27 @@ The result is a Markdown editor that remains pleasant for normal writing while b
   <img src="assets/插入.png" alt="QuillMesh context and insert menus" width="1000">
 </p>
 
-### LaTeX formulas
+## LaTeX formulas
 
-- Inline math and centered display math through KaTeX.
+- Inline math and centered display math rendered by KaTeX.
 - Live preview while editing LaTeX.
 - Visual palettes for common symbols, Greek letters, set and logic notation, and calculus operators.
-- Reusable formula templates for fractions, roots, matrices, piecewise functions, and equation systems.
+- Reusable templates for fractions, roots, matrices, piecewise functions, and equation systems.
 - LaTeX command autocomplete, selection-aware insertion, favorites, and recent-formula history.
 - Optional automatic numbering for block equations.
 - Formula-aware HTML, PDF, PNG, and DOCX export.
 
 <p align="center">
-  <img src="assets/公式编辑.png" alt="QuillMesh LaTeX editor with live preview" width="760">
+  <img src="assets/公式编辑.png" alt="QuillMesh visual LaTeX editor and live preview" width="1100">
 </p>
 
-### Images and local assets
+## Images and local assets
 
-- Paste clipboard images directly into a document-local `assets/` folder.
+- Paste clipboard images into a document-local `assets/` folder.
 - Keep portable relative paths in Markdown.
 - Resize images visually with drag handles.
 - Copy an image, reset its size, or reveal it in the file manager from the context menu.
-- Click for a lightbox preview, then use the mouse wheel to zoom and drag to pan.
+- Open a lightbox preview, then zoom with the mouse wheel and drag to pan.
 
 <p align="center">
   <img src="assets/图片编辑.png" alt="QuillMesh visual image resizing and image menu" width="1000">
@@ -83,56 +95,42 @@ The result is a Markdown editor that remains pleasant for normal writing while b
 
 ## Personal settings
 
-Open Settings from the home page, **Edit → Settings**, or `Ctrl+,`.
+Open Settings from the home page, **File → Settings**, or `Ctrl+,`.
 
-- Theme: Elegant, Light, Dark, Newsprint, or imported CSS.
-- Editor font: follow the theme, sans serif, serif, or monospace.
+- Elegant, Light, Dark, Newsprint, or imported CSS themes.
+- Theme, sans-serif, serif, or monospace editor fonts.
 - Font size, line spacing, and content width.
 - Autosave and status-bar controls.
-- Windows Markdown default-app status and a direct link to the system confirmation page.
-- Optional Codex integration.
+- Windows Markdown default-app status and a direct link to system confirmation.
+- Optional Codex integration, disabled by default.
 
 Preferences are stored locally and restored on the next launch.
 
 ## Optional Codex collaboration
 
-Codex integration is **off by default**. When it is disabled, QuillMesh does not show Codex controls and does not start the local Companion bridge. Enable it in Settings only when you want the workflow.
+The repository includes [QuillMesh Companion](plugins/quillmesh-companion/README.md), a local Codex plugin and MCP service. When enabled in Settings, Codex can read the active document, cursor, selection, or section; inspect Markdown and formulas; propose revision-bound changes; locate content in QuillMesh; and request PDF, PNG, HTML, or DOCX export.
 
-The repository includes [QuillMesh Companion](plugins/quillmesh-companion/README.md), a local Codex plugin and MCP service. Once installed and enabled, Codex can:
-
-- read the active document, cursor, selection, or current section;
-- inspect Markdown structure, formulas, tables, quotes, tasks, and image paths;
-- open a document at a heading or approximate line;
-- propose exact or multi-paragraph edits;
-- return changes to QuillMesh as a visible Diff;
-- request PDF, PNG, HTML, or DOCX export.
-
-A typical reviewed workflow is:
+A reviewed workflow stays explicit:
 
 1. Select text or place the cursor in a section in QuillMesh.
-2. Send the selection, section, or document to Codex.
-3. Codex prepares a revision-bound proposal.
-4. QuillMesh displays the Diff at the document level.
-5. Accept or reject it. Accepted changes pass another revision check before writing.
+2. Send the selection, section, or full document to Codex.
+3. Codex prepares a proposal against the current document revision.
+4. QuillMesh displays the change as a Diff and records it in Review.
+5. Accept or reject it; accepted changes pass another revision check before writing.
 
 The bridge listens only on `127.0.0.1` and uses a random bearer token. QuillMesh does not upload documents to a separate hosted bridge.
 
 ## Export
 
-QuillMesh can export the active document to:
-
-- PDF
-- PNG image
-- self-contained HTML
-- Microsoft Word `.docx`
+QuillMesh exports the active document to PDF, PNG image, self-contained HTML, and Microsoft Word `.docx`.
 
 ## Download and run
 
 ### Preview installers
 
-Download available Windows preview installers from [GitHub Releases](https://github.com/lbiao2965-bot/QuillMesh/releases). Preview packages may be unsigned and can trigger an operating-system security warning.
+Download preview installers from [GitHub Releases](https://github.com/lbiao2965-bot/QuillMesh/releases). Preview packages may be unsigned and can trigger an operating-system security warning.
 
-The Windows installer registers QuillMesh as an available handler for `.md`, `.markdown`, `.mdown`, and `.mkd`. Windows requires an administrator-approved installation and keeps the final default-app choice under user control. After installation, open **Settings → Files → Manage default apps**, then select QuillMesh for `.md` and `.markdown`.
+The Windows installer registers QuillMesh as an available handler for `.md`, `.markdown`, `.mdown`, and `.mkd`. Windows keeps the final default-app choice under user control. After installation, open **Settings → Files → Manage default apps**, then choose QuillMesh for the Markdown extensions you use.
 
 ### Build from source
 
@@ -145,15 +143,10 @@ npm install
 npm run dev
 ```
 
-Build and verify:
+Verify and package:
 
 ```powershell
 npm run verify
-```
-
-Create a platform package:
-
-```powershell
 npm run dist:win
 npm run dist:mac
 npm run dist:linux
@@ -181,12 +174,14 @@ Artifacts are written to `release/` by default.
 | Toggle full screen | `F11` | `⌃⌘F` |
 | Exit full screen | `Esc` | `Esc` |
 
+Review mode and Add comment are also available from the command palette and the editor context menu.
+
 ## Project structure
 
 ```text
-src/main/       Electron main process, document sessions, conflict safety, export, and local bridge
+src/main/       Electron main process, document sessions, annotations, export, and local bridge
 src/preload/    Typed IPC boundary
-src/renderer/   Milkdown/ProseMirror editor and desktop UI
+src/renderer/   Milkdown/ProseMirror editor, review tools, and desktop UI
 src/shared/     Shared settings, types, and translations
 resources/      Icons, demos, and built-in templates
 themes/         Example CSS themes
@@ -200,7 +195,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for implementation details, [CO
 
 - Improve CommonMark/GFM and common Typora compatibility.
 - Continue long-document performance work.
-- Expand cross-directory asset management and export fidelity.
+- Expand review anchors, asset management, and export fidelity.
 - Polish Companion installation and reviewed agent workflows.
 - Publish signed Windows and notarized macOS builds.
 

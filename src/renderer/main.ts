@@ -1,4 +1,5 @@
 import {
+  applyCommentMarks,
   applyHeadingCollapse,
   applyCodeWrap,
   clearSlashQuery,
@@ -13,6 +14,7 @@ import {
   insertTable,
   isManagedRelativeImageSource,
   isImageViewerOpen,
+  locatePlainTextRange,
   moveHeadingSection,
   runFormattingCommand,
   runTableCommand,
@@ -21,7 +23,23 @@ import {
   setImagePasteHandler,
   setMarkdown,
   showMathModal,
+  type CommentMarkRange,
 } from './editor/editor'
+import {
+  addComment,
+  addSuggestions,
+  contextAround,
+  deleteComment,
+  ensureAnnotations,
+  flushAnnotations,
+  getAnnotations,
+  locateAnchor,
+  makeAnnotationId,
+  onAnnotationsChanged,
+  setCommentResolved,
+  setSuggestionStatus,
+  type AnnotationSuggestion,
+} from './annotations'
 import { SearchPanel } from './editor/search-panel'
 import { applyTheme, loadSavedTheme } from './themes/theme-manager'
 import { setRendererLanguage, t } from './i18n'
@@ -40,6 +58,7 @@ import './themes/base.css'
 
 type EditorMode = 'wysiwyg' | 'source' | 'split'
 type SidePanelTab = 'files' | 'outline' | 'tasks'
+type ReviewFilter = 'open' | 'resolved' | 'all'
 
 interface ExternalState { content: string; revision: DiskRevision | null; deleted?: boolean; target?: string; targetKey?: string; pathChanged?: boolean }
 interface DocumentSession {
@@ -77,6 +96,9 @@ let autosaveEnabled = localStorage.getItem('colamd-autosave') === '1'
 let appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, autosave: autosaveEnabled, theme: loadSavedTheme() }
 let manualPanelHidden = localStorage.getItem('file-panel-hidden') === '1'
 let activePanelTab: SidePanelTab = (localStorage.getItem('file-panel-tab') as SidePanelTab) || 'files'
+let reviewFilter: ReviewFilter = 'open'
+let reviewMode = localStorage.getItem('colamd-review-mode') === '1'
+let reviewMarksFrame: number | null = null
 let outlinePanel: OutlinePanel | null = null
 let outlineFrame: number | null = null
 let statusFrame: number | null = null
@@ -410,6 +432,17 @@ function bridgeProposal(requestId: string, payload: Record<string, unknown>): vo
     window.electronAPI.respondCodexBridge(requestId, null, 'The source text no longer matches the open document.')
     return
   }
+  // Codex 提案同时登记为审阅建议：先记 pending，接受/拒绝后更新状态并保留记录。
+  const proposalTitle = typeof payload.title === 'string' ? payload.title : t('codexProposalTitle')
+  const pendingSuggestions: AnnotationSuggestion[] = edits.map((edit) => {
+    const located = locateAnchor(session.content, edit.search, '', '')
+    const context = located ? contextAround(session.content, located.from, located.to) : { prefix: '', suffix: '' }
+    return {
+      id: makeAnnotationId('s'), anchor: edit.search, prefix: context.prefix, suffix: context.suffix,
+      replacement: edit.replacement, title: proposalTitle, source: 'codex', status: 'pending', createdAt: Date.now(),
+    }
+  })
+  addSuggestions(session.documentId, pendingSuggestions)
   const panel = document.createElement('section')
   panel.id = 'codex-diff-popover'; panel.className = 'codex-diff-popover'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'false')
 
@@ -466,6 +499,7 @@ function bridgeProposal(requestId: string, payload: Record<string, unknown>): vo
     panel.remove()
     if (dismissActiveCodexProposal === finish) dismissActiveCodexProposal = null
     setCodexDiffPending(false)
+    for (const suggestion of pendingSuggestions) setSuggestionStatus(session.documentId, suggestion.id, decision)
     window.electronAPI.respondCodexBridge(requestId, { decision, documentId: session.documentId, path: session.path, revision: session.revision?.value ?? null })
   }
   dismissActiveCodexProposal = finish
@@ -546,6 +580,7 @@ function snapshotActive(): void {
   markSessionChanged(session, contentOf(session))
   session.sourceScroll = sourceEl().scrollTop
   session.editorScroll = editorEl().scrollTop
+  flushAnnotations(session.documentId)
 }
 
 function setDirty(session: DocumentSession, dirty: boolean, forceNotify = false): void {
@@ -654,6 +689,9 @@ function applySession(session: DocumentSession): void {
     applyHeadingCollapse(session.collapsedHeadings)
     applyCodeWrap(session.codeWrap)
     scheduleOutline(); scheduleTasks(); scheduleStatus(); scheduleLongDocumentPaint()
+    ensureAnnotations(session.documentId)
+    scheduleCommentMarks()
+    if (reviewMode) renderReview()
   })
 }
 
@@ -954,6 +992,232 @@ function setPanel(tab: SidePanelTab): void {
   if (tab === 'outline') scheduleOutline(); if (tab === 'tasks') scheduleTasks()
 }
 
+// ---------- 批注与审阅 ----------
+
+const reviewPanelEl = () => document.getElementById('review-panel') as HTMLElement
+const reviewToggleEl = () => document.getElementById('review-toggle-btn') as HTMLButtonElement
+
+function setReviewMode(on: boolean): void {
+  reviewMode = on
+  localStorage.setItem('colamd-review-mode', on ? '1' : '0')
+  reviewPanelEl().hidden = !on
+  document.body.classList.toggle('show-review-panel', on)
+  reviewToggleEl().classList.toggle('active', on)
+  reviewToggleEl().setAttribute('aria-pressed', String(on))
+  if (on) renderReview()
+  window.requestAnimationFrame(() => window.dispatchEvent(new Event('colamd-layout-changed')))
+}
+
+function scheduleCommentMarks(): void {
+  if (reviewMarksFrame !== null) return
+  reviewMarksFrame = requestAnimationFrame(() => {
+    reviewMarksFrame = null
+    refreshCommentMarks()
+  })
+}
+
+function refreshCommentMarks(): void {
+  const session = activeSession()
+  if (!session || session.mode === 'source') { applyCommentMarks([]); return }
+  const data = getAnnotations(session.documentId)
+  const ranges: CommentMarkRange[] = []
+  for (const comment of data.comments) {
+    if (comment.resolved) continue
+    const range = locatePlainTextRange(comment.anchor, comment.prefix, comment.suffix)
+    if (range) ranges.push({ ...range, kind: 'comment' })
+  }
+  for (const suggestion of data.suggestions) {
+    if (suggestion.status !== 'pending') continue
+    const range = locatePlainTextRange(suggestion.anchor, suggestion.prefix, suggestion.suffix)
+    if (range) ranges.push({ ...range, kind: 'suggestion' })
+  }
+  applyCommentMarks(ranges)
+}
+
+function revealAnnotation(anchor: string, prefix: string, suffix: string): void {
+  const range = locatePlainTextRange(anchor, prefix, suffix)
+  if (!range) return
+  const view = getEditorView()
+  if (!view) return
+  try {
+    const coords = view.coordsAtPos(range.from)
+    const editor = editorEl()
+    editor.scrollTo({ top: editor.scrollTop + coords.top - editor.getBoundingClientRect().top - editor.clientHeight / 2, behavior: 'smooth' })
+  } catch {}
+}
+
+function openCommentEditor(): void {
+  const view = getEditorView()
+  const session = activeSession()
+  if (!view || !session || view.state.selection.empty) return
+  const { from, to } = view.state.selection
+  const anchor = view.state.doc.textBetween(from, to)
+  if (!anchor.trim()) return
+  const fullText = view.state.doc.textBetween(0, view.state.doc.content.size)
+  const { prefix, suffix } = contextAround(fullText, from, to)
+  let coords = { left: 32, bottom: 72 }
+  try { coords = view.coordsAtPos(from) } catch {}
+
+  const popover = document.createElement('div')
+  popover.className = 'comment-editor-popover'
+  const quote = document.createElement('blockquote')
+  quote.className = 'comment-editor-quote'
+  quote.textContent = anchor.length > 80 ? `${anchor.slice(0, 80)}…` : anchor
+  const textarea = document.createElement('textarea')
+  textarea.className = 'comment-editor-input'
+  textarea.rows = 3
+  textarea.placeholder = t('commentPlaceholder')
+  const footer = document.createElement('div')
+  footer.className = 'comment-editor-footer'
+  const cancel = document.createElement('button')
+  cancel.type = 'button'
+  cancel.className = 'math-modal-btn cancel'
+  cancel.textContent = t('cancel')
+  const save = document.createElement('button')
+  save.type = 'button'
+  save.className = 'math-modal-btn save'
+  save.textContent = t('save')
+  footer.append(cancel, save)
+  popover.append(quote, textarea, footer)
+  document.body.appendChild(popover)
+  const width = 300
+  popover.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, coords.left))}px`
+  popover.style.top = `${Math.max(60, Math.min(window.innerHeight - 220, coords.bottom + 8))}px`
+
+  const close = (): void => { popover.remove(); view.focus() }
+  cancel.addEventListener('click', close)
+  popover.addEventListener('keydown', (event) => {
+    event.stopPropagation()
+    if (event.key === 'Escape') { event.preventDefault(); close() }
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); save.click() }
+  })
+  save.addEventListener('click', () => {
+    const text = textarea.value.trim()
+    if (text) {
+      addComment(session.documentId, {
+        id: makeAnnotationId('c'), anchor, prefix, suffix, text,
+        createdAt: Date.now(), resolved: false,
+      })
+      setReviewMode(true)
+    }
+    close()
+  })
+  setTimeout(() => textarea.focus(), 30)
+}
+
+function reviewItemTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function acceptSuggestionItem(suggestion: AnnotationSuggestion): void {
+  const session = activeSession()
+  if (!session) return
+  const content = contentOf(session)
+  const located = locateAnchor(content, suggestion.anchor, suggestion.prefix, suggestion.suffix)
+  if (!located) {
+    showCodexToast(t('suggestionNotFound'))
+    return
+  }
+  const next = content.slice(0, located.from) + suggestion.replacement + content.slice(located.to)
+  session.content = next
+  sourceEl().value = next
+  if (session.mode !== 'source') replaceEditorMarkdown(session, next)
+  setDirty(session, true, true)
+  scheduleAutosave(session)
+  setSuggestionStatus(session.documentId, suggestion.id, 'accepted')
+}
+
+function renderReview(): void {
+  const list = document.getElementById('review-list') as HTMLElement | null
+  const empty = document.getElementById('review-empty') as HTMLElement | null
+  if (!list || !empty) return
+  list.replaceChildren()
+  const session = activeSession()
+  const data = session ? getAnnotations(session.documentId) : { version: 1 as const, comments: [], suggestions: [] }
+  const comments = data.comments.filter((comment) => reviewFilter === 'all' || (reviewFilter === 'resolved') === comment.resolved)
+  const suggestions = data.suggestions.filter((suggestion) =>
+    reviewFilter === 'all' || (reviewFilter === 'resolved' ? suggestion.status !== 'pending' : suggestion.status === 'pending'))
+  empty.hidden = comments.length + suggestions.length > 0
+
+  for (const suggestion of suggestions) {
+    const item = document.createElement('div')
+    item.className = `review-item suggestion ${suggestion.status}`
+    const head = document.createElement('div')
+    head.className = 'review-item-head'
+    const kind = document.createElement('span')
+    kind.className = 'review-item-kind'
+    kind.textContent = `${t('suggestionKind')} · ${suggestion.source === 'codex' ? 'Codex' : t('commentKind')}`
+    const time = document.createElement('time')
+    time.textContent = reviewItemTime(suggestion.createdAt)
+    head.append(kind, time)
+    const anchor = document.createElement('blockquote')
+    anchor.className = 'review-item-anchor'
+    anchor.textContent = suggestion.anchor.length > 120 ? `${suggestion.anchor.slice(0, 120)}…` : suggestion.anchor
+    const title = document.createElement('div')
+    title.className = 'review-item-text'
+    title.textContent = suggestion.title
+    const actions = document.createElement('div')
+    actions.className = 'review-item-actions'
+    if (suggestion.status === 'pending') {
+      const reject = document.createElement('button')
+      reject.type = 'button'
+      reject.className = 'ghost'
+      reject.textContent = t('rejectSuggestion')
+      reject.addEventListener('click', () => { if (session) setSuggestionStatus(session.documentId, suggestion.id, 'rejected') })
+      const accept = document.createElement('button')
+      accept.type = 'button'
+      accept.className = 'primary'
+      accept.textContent = t('acceptSuggestion')
+      accept.addEventListener('click', () => acceptSuggestionItem(suggestion))
+      actions.append(reject, accept)
+    } else {
+      const status = document.createElement('span')
+      status.className = `review-status ${suggestion.status}`
+      status.textContent = suggestion.status === 'accepted' ? t('statusAccepted') : t('statusRejected')
+      actions.append(status)
+    }
+    item.append(head, anchor, title, actions)
+    anchor.addEventListener('click', () => revealAnnotation(suggestion.anchor, suggestion.prefix, suggestion.suffix))
+    list.appendChild(item)
+  }
+
+  for (const comment of comments) {
+    const item = document.createElement('div')
+    item.className = `review-item comment${comment.resolved ? ' resolved' : ''}`
+    const head = document.createElement('div')
+    head.className = 'review-item-head'
+    const kind = document.createElement('span')
+    kind.className = 'review-item-kind'
+    kind.textContent = t('commentKind')
+    const time = document.createElement('time')
+    time.textContent = reviewItemTime(comment.createdAt)
+    head.append(kind, time)
+    const anchor = document.createElement('blockquote')
+    anchor.className = 'review-item-anchor'
+    anchor.textContent = comment.anchor.length > 120 ? `${comment.anchor.slice(0, 120)}…` : comment.anchor
+    const text = document.createElement('div')
+    text.className = 'review-item-text'
+    text.textContent = comment.text
+    const actions = document.createElement('div')
+    actions.className = 'review-item-actions'
+    const toggle = document.createElement('button')
+    toggle.type = 'button'
+    toggle.className = 'ghost'
+    toggle.textContent = comment.resolved ? t('reopenComment') : t('resolveComment')
+    toggle.addEventListener('click', () => { if (session) setCommentResolved(session.documentId, comment.id, !comment.resolved) })
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'ghost danger'
+    remove.textContent = t('deleteComment')
+    remove.addEventListener('click', () => { if (session) deleteComment(session.documentId, comment.id) })
+    actions.append(toggle, remove)
+    item.append(head, anchor, text, actions)
+    anchor.addEventListener('click', () => revealAnnotation(comment.anchor, comment.prefix, comment.suffix))
+    list.appendChild(item)
+  }
+}
+
 async function refreshSiblings(): Promise<void> {
   const session = activeSession(); if (!session?.path) { fileListEl().replaceChildren(); return }
   const files = await window.electronAPI.listSiblings(session.documentId); if (!files || session !== activeSession()) return
@@ -1038,6 +1302,7 @@ function registerCommands(search: SearchPanel): void {
   commands.register({ id: 'view.filePanel', label: () => t('toggleFileList'), execute: () => { manualPanelHidden = !manualPanelHidden; localStorage.setItem('file-panel-hidden', manualPanelHidden ? '1' : '0'); updatePanelVisibility() } })
   commands.register({ id: 'view.source', label: () => t('sourceMode'), execute: toggleSourceMode })
   commands.register({ id: 'view.split', label: () => t('splitView'), execute: toggleSplitMode })
+  commands.register({ id: 'view.review', label: () => t('reviewMode'), keywords: () => ['review', 'comment', '审阅', '批注'], execute: () => setReviewMode(!reviewMode) })
   commands.register({ id: 'app.settings', label: () => t('settings'), keywords: () => ['preferences', 'font', 'theme', 'Codex'], execute: openSettings })
   commands.register({ id: 'codex.sendSelection', label: () => t('codexSendSelection'), keywords: () => ['Codex', 'AI', 'selection'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('selection') })
   commands.register({ id: 'codex.sendSection', label: () => t('codexSendSection'), keywords: () => ['Codex', 'AI', 'section', 'heading'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('section') })
@@ -1179,6 +1444,7 @@ function showEditorContextMenu(event: MouseEvent): void {
   if (appSettings.codexEnabled && hasSelection) appendMenuRow(rows, t('codexSendSelection'), () => {
     void sendCodexContext('selection')
   }, 'Codex')
+  if (hasSelection) appendMenuRow(rows, t('addComment'), () => openCommentEditor(), '💬')
   appendInsertMenu(surface)
   showMenu(surface, event.clientX, event.clientY)
 }
@@ -1341,7 +1607,7 @@ async function init(): Promise<void> {
   applyAppSettings(appSettings)
   refreshStaticLabels()
   setCodexConnected(await api.getCodexConnectionStatus())
-  api.onLanguageChanged((language) => { setRendererLanguage(language); refreshStaticLabels(); renderTabs(); renderRecent(); renderConflict(); scheduleStatus(); scheduleTasks(); updateCodexChrome(); if (!codexMenuEl().hidden) renderCodexMenu() })
+  api.onLanguageChanged((language) => { setRendererLanguage(language); refreshStaticLabels(); renderTabs(); renderRecent(); renderConflict(); scheduleStatus(); scheduleTasks(); updateCodexChrome(); if (!codexMenuEl().hidden) renderCodexMenu(); if (reviewMode) renderReview() })
   api.onAppSettingsChanged((settings) => { applyAppSettings(settings); void applyThemeSetting(settings.theme) })
   await applyThemeSetting(appSettings.theme)
   const recordWysiwygChange = (markdown: string): void => {
@@ -1430,6 +1696,18 @@ async function init(): Promise<void> {
   for (const id of ['fullscreen-menu-exit', 'fullscreen-exit-btn']) document.getElementById(id)?.addEventListener('click', () => api.exitFullscreen())
   for (const tab of ['files', 'outline', 'tasks'] as SidePanelTab[]) document.getElementById(`${tab}-tab`)?.addEventListener('click', () => setPanel(tab))
   setPanel(activePanelTab)
+  reviewToggleEl().addEventListener('click', () => setReviewMode(!reviewMode))
+  document.getElementById('review-close-btn')?.addEventListener('click', () => setReviewMode(false))
+  setReviewMode(reviewMode)
+  for (const filter of ['open', 'resolved', 'all'] as ReviewFilter[]) {
+    document.getElementById(`review-filter-${filter}`)?.addEventListener('click', () => {
+      reviewFilter = filter
+      for (const name of ['open', 'resolved', 'all'] as ReviewFilter[]) document.getElementById(`review-filter-${name}`)?.classList.toggle('active', name === filter)
+      renderReview()
+    })
+  }
+  onAnnotationsChanged(() => { scheduleCommentMarks(); if (reviewMode) renderReview() })
+  window.addEventListener('colamd-document-changed', scheduleCommentMarks)
   fileListEl().addEventListener('click', (event) => { const path = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]')?.dataset.path; const session = activeSession(); if (path && session) void api.openSibling(session.documentId, path) })
   ;(document.getElementById('tasks-open-only') as HTMLInputElement).addEventListener('change', renderTasks)
   ;(document.getElementById('tasks-list') as HTMLElement).addEventListener('click', (event) => { const text = (event.target as HTMLElement).closest<HTMLButtonElement>('.task-item')?.dataset.task; if (!text) return; Array.from(editorEl().querySelectorAll('li[data-item-type="task"]')).find((item) => item.textContent?.includes(text))?.scrollIntoView({ behavior: 'smooth', block: 'center' }) })
@@ -1575,6 +1853,13 @@ function refreshStaticLabels(): void {
   recentButtonEl().title = t('recentFiles')
   recentButtonEl().setAttribute('aria-label', t('recentFiles'))
   ;(document.getElementById('tasks-tab') as HTMLElement).textContent = t('tasks')
+  const reviewToggle = document.getElementById('review-toggle-btn') as HTMLButtonElement
+  reviewToggle.title = t('reviewMode'); reviewToggle.setAttribute('aria-label', t('reviewMode'))
+  ;(document.getElementById('review-panel-title') as HTMLElement).textContent = t('review')
+  ;(document.getElementById('review-filter-open') as HTMLElement).textContent = t('reviewOpen')
+  ;(document.getElementById('review-filter-resolved') as HTMLElement).textContent = t('reviewResolved')
+  ;(document.getElementById('review-filter-all') as HTMLElement).textContent = t('reviewAll')
+  ;(document.getElementById('review-empty') as HTMLElement).textContent = t('reviewEmpty')
   ;(document.getElementById('tasks-open-only-label') as HTMLElement).textContent = t('openTasksOnly')
   ;(document.getElementById('tasks-empty') as HTMLElement).textContent = t('noTasks')
   ;(document.getElementById('split-view-btn') as HTMLElement).textContent = t('splitView')
