@@ -49,8 +49,11 @@ function sanitizeClone(root: HTMLElement): void {
   // Collapse, table/code toolbars, and resize handles are all presentation
   // affordances. Removing them from the clone ensures every exporter sees the
   // complete document rather than an editor-specific collapsed snapshot.
-  root.querySelectorAll('script, iframe, object, embed, .heading-collapse-toggle, .colamd-table-tools, .colamd-code-tools, .column-resize-handle').forEach((element) => element.remove())
+  root.querySelectorAll('script, iframe, object, embed, .heading-collapse-toggle, .colamd-table-tools, .colamd-code-tools, .column-resize-handle, .mermaid-toolbar').forEach((element) => element.remove())
   root.querySelectorAll('colgroup').forEach((element) => element.remove())
+  // The code/preview toggle is an editor view state; exports always include
+  // the rendered diagram regardless of the toggle the user last touched.
+  root.querySelectorAll<HTMLElement>('.mermaid-body[hidden]').forEach((element) => element.removeAttribute('hidden'))
   root.querySelectorAll<HTMLElement>('.tableWrapper').forEach((wrapper) => {
     const parent = wrapper.parentElement
     if (!parent) { wrapper.remove(); return }
@@ -82,6 +85,16 @@ function sanitizeClone(root: HTMLElement): void {
     marker.className = 'export-task-marker'
     marker.textContent = item.dataset.checked === 'true' ? '☑ ' : '☐ '
     item.prepend(marker)
+  })
+
+  // 引文标注：编辑器里用 CSS 隐藏 [@key] 源码、以 ::after 显示标签（@作者 / [编号]）。
+  // 导出时把标签固化为纯文本并去掉标注类，确保 Word 等不理解 ::after 的格式也能看到，
+  // 且与编辑器当前显示样式完全一致。
+  root.querySelectorAll<HTMLElement>('.cite-mark').forEach((mark) => {
+    mark.textContent = mark.dataset.citeLabel ?? mark.textContent
+    mark.classList.remove('cite-mark', 'cite-mark-missing')
+    mark.removeAttribute('data-cite-keys')
+    mark.removeAttribute('data-cite-label')
   })
 }
 

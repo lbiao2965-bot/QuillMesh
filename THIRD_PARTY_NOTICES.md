@@ -9,6 +9,7 @@ Direct application dependencies include:
 | `@milkdown/kit` | MIT     |
 | `docx`          | MIT     |
 | `katex`         | MIT     |
+| `mermaid`       | MIT     |
 | `remark-breaks` | MIT     |
 | `remark-math`   | MIT     |
 

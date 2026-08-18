@@ -180,12 +180,38 @@
     <nav id="review-list" aria-label="Review"></nav>
     <div id="review-empty" hidden>No comments or suggestions</div>
   </aside>
+  <section id="citations-bar" hidden>
+    <div id="citations-bar-resize" role="separator" aria-orientation="horizontal"></div>
+    <header class="citations-bar-header">
+      <h2 id="citations-bar-title">References</h2>
+      <span id="citations-bar-count"></span>
+      <span class="citations-bar-spacer"></span>
+      <select id="citations-display-select" aria-label="Citation mark style">
+        <option id="citations-display-author" value="author">@Author</option>
+        <option id="citations-display-numeric" value="numeric">[1] Numbered</option>
+      </select>
+      <select id="citations-style-select" aria-label="Citation style">
+        <option value="apa">APA</option>
+        <option value="mla">MLA</option>
+        <option value="chicago">Chicago</option>
+        <option value="gbt">GB/T 7714</option>
+      </select>
+      <button id="citations-copy-btn" type="button">Copy</button>
+      <button id="citations-insert-btn" type="button">Insert at end</button>
+      <button id="citations-load-btn" type="button">Load bibliography file…</button>
+      <button id="citations-bar-close" type="button" aria-label="Close">×</button>
+    </header>
+    <div id="citations-bib-path" hidden></div>
+    <ol id="citations-bar-list"></ol>
+    <div id="citations-bar-empty" hidden></div>
+  </section>
   <footer id="status-bar" aria-live="polite">
     <span id="status-words"></span>
     <span id="status-characters"></span>
     <span id="status-lines"></span>
     <span id="codex-connection-status" class="codex-connection-status disconnected"><span aria-hidden="true"></span><b>Codex disconnected</b></span>
     <span class="status-spacer"></span>
+    <button id="citations-toggle-btn" type="button" aria-pressed="false">References</button>
     <button id="split-view-btn" type="button">Split</button>
     <button id="autosave-btn" type="button" aria-pressed="false">Auto save: off</button>
   </footer>

@@ -4,7 +4,16 @@ Notable user-visible changes are documented here. The project follows semantic v
 
 ## Unreleased
 
-- Rewrote the English and Chinese project documentation around the product artwork, current workflows, review mode, and platform downloads.
+## 0.2.7 - 2026-08-18
+
+- Added live Mermaid rendering for fenced `mermaid` code blocks, with source/preview switching, syntax feedback, full-screen viewing, editing, and SVG/PNG copy or save actions.
+- Added BibTeX, BibLaTeX, and CSL JSON bibliography loading with automatic sibling-file discovery.
+- Added searchable citation insertion, hover previews, missing-key warnings, author/numeric in-text display, and APA, MLA, Chicago, or GB/T 7714 reference formatting.
+- Preserved Pandoc-compatible `[@citekey]` syntax when WYSIWYG content is serialized back to Markdown.
+- Added a resizable references bar with jump, selection, copy, and insert-at-end workflows.
+- Added reference-list output to PDF, PNG, HTML, and DOCX exports, and preserved rendered Mermaid diagrams in PDF, PNG, and HTML exports.
+- Added a Mermaid and citation demonstration document plus deterministic parsing and syntax regression coverage.
+- Rewrote the English and Chinese project documentation and added the latest citation-management screenshot.
 
 ## 0.2.6 - 2026-08-17
 
