@@ -31,6 +31,20 @@ const { markdownSectionAtLine, sourceSelectionContext } = loadTypeScript('../src
 const { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings } = loadTypeScript('../src/shared/settings.ts')
 const { isQuillMeshProgId, markdownLaunchPaths, parseRegistryDefaultValue, parseRegistryProgId } = loadTypeScript('../src/main/file-association.ts')
 const { autocompleteCommands, snippetCursorIndex, symbolData, symbolTabs, withoutSnippetCursor } = loadTypeScript('../src/renderer/editor/math-symbols.ts')
+const { waitForRenderKeys } = loadTypeScript('../src/renderer/mermaid-export.ts')
+const {
+  BibliographyLoadGuard,
+  buildReferencesHtml,
+  citationStyles,
+  extractCiteKeysFromMarkdown,
+  formatEntryStyled,
+  getBibliographyPath,
+  loadBibliographyContent,
+  normalizeCitationMarkdown,
+  parseBibTeX,
+  parseCslJson,
+} = loadTypeScript('../src/renderer/citations.ts')
+const { BibliographyBindings, findSiblingBibliography, readBibliographyFile } = loadTypeScript('../src/main/bibliography.ts')
 const katex = require('katex')
 
 const cleanA = revisionFor('# A\n', 1000, 4)
@@ -205,4 +219,95 @@ for (const items of Object.values(symbolData)) {
   }
 }
 
-console.log('document-session regression: persistence, settings, file associations, split sync, outline boundaries, Codex context, and formula assistant passed')
+// Citation parsing and the shipped feature demo stay compatible with ordinary
+// BibTeX/CSL input, citation ordering, fenced-code exclusion, and every
+// supported reference-list style. Mermaid parses every diagram in the demo.
+;(async () => {
+  const demoPath = path.resolve('demo/mermaid-citation-demo.md')
+  const bibPath = path.resolve('demo/mermaid-citation-demo.bib')
+  const demoMarkdown = fs.readFileSync(demoPath, 'utf8')
+  const bibContent = fs.readFileSync(bibPath, 'utf8')
+  const parsedBib = parseBibTeX(bibContent)
+  assert.equal(parsedBib.length, 6)
+  assert.equal(parsedBib[0].key, 'vaswani2017attention')
+  assert.equal(parsedBib[0].authors[0].family, 'Vaswani')
+  assert.equal(parsedBib.at(-1).year, '2024')
+
+  const parsedCsl = parseCslJson(JSON.stringify([{ id: 'sample', type: 'article-journal', title: 'Sample', author: [{ family: 'Li', given: 'Biao' }], issued: { 'date-parts': [[2026]] }, 'container-title': 'QuillMesh Notes' }]))
+  assert.deepEqual(parsedCsl.map(({ key, year, venue }) => ({ key, year, venue })), [{ key: 'sample', year: '2026', venue: 'QuillMesh Notes' }])
+
+  const citeKeys = extractCiteKeysFromMarkdown(demoMarkdown)
+  assert.deepEqual(citeKeys, ['vaswani2017attention', 'devlin2019bert', 'he2016resnet', 'knuth1984texbook', '10268655', 'missing2024nobody'])
+  assert.deepEqual(extractCiteKeysFromMarkdown('`[@inline]`\n```text\n[@fenced]\n```\n[@real; @second]'), ['real', 'second'])
+  assert.deepEqual(
+    extractCiteKeysFromMarkdown('  ````md\n[@long-fence]\n```\n[@still-fenced]\n  ````\n    [@indented]\n`` `[@multi-inline]` `` and [@prose]'),
+    ['prose'],
+  )
+  assert.equal(
+    normalizeCitationMarkdown('Before \\[@real] and `\\[@inline]`\n```md\n\\[@fenced]\n```\nAfter \\[@one; @two]'),
+    'Before [@real] and `\\[@inline]`\n```md\n\\[@fenced]\n```\nAfter [@one; @two]',
+  )
+  assert.equal(
+    normalizeCitationMarkdown('  ````md\n\\[@fenced]\n```\n\\[@still-fenced]\n  ````\n    \\[@indented]\n`` `\\[@multi]` `` and \\[@prose]'),
+    '  ````md\n\\[@fenced]\n```\n\\[@still-fenced]\n  ````\n    \\[@indented]\n`` `\\[@multi]` `` and [@prose]',
+  )
+
+  const bibliographyBindings = new BibliographyBindings()
+  bibliographyBindings.set('doc-a', 'A.bib', 'manual')
+  bibliographyBindings.set('doc-b', 'B.bib', 'sibling')
+  assert.deepEqual(bibliographyBindings.get('doc-a'), { path: 'A.bib', source: 'manual' })
+  assert.deepEqual(bibliographyBindings.get('doc-b'), { path: 'B.bib', source: 'sibling' })
+  bibliographyBindings.delete('doc-a')
+  assert.equal(bibliographyBindings.get('doc-a'), null)
+  assert.equal(bibliographyBindings.get('doc-b').path, 'B.bib')
+
+  const bibliographyGuard = new BibliographyLoadGuard()
+  const slowDocumentA = bibliographyGuard.begin('doc-a')
+  const fastDocumentB = bibliographyGuard.begin('doc-b')
+  assert.equal(bibliographyGuard.isCurrent(slowDocumentA, 'doc-a'), false)
+  assert.equal(bibliographyGuard.isCurrent(fastDocumentB, 'doc-b'), true)
+  assert.equal(bibliographyGuard.isCurrent(fastDocumentB, 'doc-a'), false)
+
+  const renderedKeys = new Set()
+  let poll = 0
+  assert.equal(await waitForRenderKeys(
+    ['diagram-a', 'diagram-b'],
+    (key) => renderedKeys.has(key),
+    async () => {
+      poll += 1
+      renderedKeys.add(poll === 1 ? 'diagram-b' : 'diagram-a')
+    },
+    100,
+  ), true)
+  assert.equal(poll, 2)
+
+  const mermaidBlocks = Array.from(demoMarkdown.matchAll(/```mermaid\s*\n([\s\S]*?)```/g), (match) => match[1].trim())
+  assert.equal(mermaidBlocks.length, 6)
+  // Mermaid's browser bundle imports DOMPurify as an initialized singleton.
+  // In this DOM-less syntax test the package exports its factory instead, so
+  // provide the two no-op hooks needed by parse(); the app still uses the real
+  // strict DOMPurify instance in Electron.
+  const { default: domPurify } = await import('dompurify')
+  domPurify.addHook ??= () => {}
+  domPurify.sanitize ??= (value) => value
+  const { default: mermaid } = await import('mermaid')
+  for (const source of mermaidBlocks) await mermaid.parse(source)
+
+  global.window = { dispatchEvent() {} }
+  global.CustomEvent ??= class CustomEvent { constructor(type) { this.type = type } }
+  assert.equal(loadBibliographyContent('', 'new-library.bib'), 0)
+  assert.equal(getBibliographyPath(), 'new-library.bib')
+  assert.equal(loadBibliographyContent(bibContent, bibPath), 6)
+  for (const style of citationStyles) assert.ok(formatEntryStyled(parsedBib[0], style).length > 20)
+  const references = buildReferencesHtml(demoMarkdown, 'References', 'gbt')
+  assert.match(references, /id="ref-vaswani2017attention"/)
+  assert.doesNotMatch(references, /missing2024nobody/)
+
+  assert.equal(await findSiblingBibliography(demoPath), bibPath)
+  assert.equal((await readBibliographyFile(bibPath))?.content, bibContent)
+
+  console.log('document-session regression: persistence, settings, file associations, split sync, outline boundaries, Codex context, formula assistant, citations, and Mermaid passed')
+})().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})

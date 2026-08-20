@@ -14,7 +14,7 @@
 
 QuillMesh is a calm, Typora-inspired desktop editor for ordinary Markdown files. It brings writing, navigation, review comments, LaTeX, tables, images, export, and revision-safe AI collaboration into one workspace—without introducing a proprietary document format or requiring cloud storage.
 
-> Current development version: `0.2.6`. QuillMesh is an early preview; compatibility and interaction details will continue to improve.
+> Current development version: `0.2.7`. QuillMesh is an early preview; compatibility and interaction details will continue to improve.
 
 ## Start with your files
 
@@ -67,6 +67,30 @@ Select text and add a comment from the context menu, then manage the discussion 
 <p align="center">
   <img src="assets/公式编辑.png" alt="QuillMesh visual LaTeX input assistant and live preview" width="1100">
 </p>
+
+### Citations and Mermaid diagrams
+
+- Load `.bib`, `.biblatex`, or CSL JSON libraries, including automatic discovery of a same-named bibliography beside the Markdown file.
+- Search a library and insert portable Pandoc-style citations such as `[@vaswani2017attention]` without hiding the underlying Markdown.
+- Switch in-text labels between first-author and numeric views; hover for details and detect missing citation keys.
+- Format references as APA, MLA, Chicago, or GB/T 7714, then copy selected entries, insert a reference list, or include it during export.
+- Render fenced `mermaid` blocks directly below their source with syntax feedback and light/dark theme support.
+- Toggle source/preview, edit with live feedback, open full-screen, and copy or save a diagram as SVG/PNG.
+
+<p align="center">
+  <img src="assets/引文管理.png" alt="QuillMesh citation manager with bibliography styles and in-text citation links" width="1100">
+</p>
+
+Mermaid remains ordinary Markdown:
+
+````markdown
+```mermaid
+flowchart LR
+    Idea --> Draft --> Review --> Publish
+```
+````
+
+Open [`demo/mermaid-citation-demo.md`](demo/mermaid-citation-demo.md) with its companion bibliography to try flowcharts, sequence diagrams, Gantt charts, class diagrams, state diagrams, and citation workflows.
 
 ### Tables, code, links, and quick insertion
 
@@ -137,7 +161,7 @@ Preferences are stored locally and restored on the next launch.
 
 ## Export
 
-QuillMesh exports the active document to PDF, PNG image, self-contained HTML, and Microsoft Word `.docx`.
+QuillMesh exports the active document to PDF, PNG image, self-contained HTML, and Microsoft Word `.docx`. Reference lists can be included in every format; rendered Mermaid diagrams are preserved in PDF, PNG, and HTML.
 
 ## Download
 
@@ -198,14 +222,15 @@ Review mode and Add comment are also available from the command palette and the 
 ## Project structure
 
 ```text
-src/main/       Electron main process, document sessions, annotations, export, and local bridge
+src/main/       Electron main process, document sessions, annotations, bibliography I/O, export, and local bridge
 src/preload/    Typed IPC boundary
-src/renderer/   Milkdown/ProseMirror editor, review tools, and desktop UI
+src/renderer/   Milkdown/ProseMirror editor, review, citations, Mermaid, and desktop UI
 src/shared/     Shared settings, types, and translations
 resources/      Icons, demos, and built-in templates
 themes/         Example CSS themes
 plugins/        QuillMesh Companion plugin and MCP service
 assets/         Product artwork and screenshots used by this README
+demo/           Mermaid and citation feature demonstration
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for implementation details, [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, [SECURITY.md](SECURITY.md) for responsible vulnerability reporting, and [docs/SIGNING.md](docs/SIGNING.md) for release-signing requirements.

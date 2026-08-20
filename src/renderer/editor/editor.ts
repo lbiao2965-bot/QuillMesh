@@ -29,6 +29,9 @@ import { highlight, remarkHighlight, highlightStringifyHandler } from './highlig
 import { ImageViewer } from './image-viewer'
 import { normalizeTyporaBlockMath } from './math-compat'
 import { katexOptionsCtx, mathInlineInputRule, mathInlineSchema, remarkMathPlugin } from './math-plugin'
+import { mermaidPlugin } from './mermaid-view'
+import { citationMarkPlugin, citationMarkPluginKey, installCitationHover, installCitationStoreSync } from './citation-plugin'
+import { normalizeCitationMarkdown } from '../citations'
 import { t } from '../i18n'
 import { sectionEndFromHeadings, sectionMoveInsertion } from '../outline-reorder'
 import { collapsedHeadingStep } from '../heading-collapse'
@@ -198,6 +201,10 @@ export function setImagePasteHandler(handler: ((file: File) => Promise<void>) | 
 
 export function isImageViewerOpen(): boolean {
   return imageViewer.isOpen
+}
+
+export function openImagePreview(src: string, alt: string): void {
+  imageViewer.open({ src, alt })
 }
 
 export type FormattingCommand =
@@ -987,7 +994,7 @@ export async function createEditor(
       })
       if (onChange) {
         ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-          onChange(markdown)
+          onChange(normalizeCitationMarkdown(markdown))
         })
       }
     })
@@ -1009,6 +1016,8 @@ export async function createEditor(
       displayMathBlockInputRule,
     ].flat())
     .use(mathEditorPlugin)
+    .use(mermaidPlugin)
+    .use(citationMarkPlugin)
     .use(documentChangePlugin)
     .use(headingCollapsePlugin)
     .use(commentMarkPlugin)
@@ -1029,6 +1038,11 @@ export async function createEditor(
 
   installImageResizeControls(root)
   installTableAndCodeTools(root)
+  installCitationHover(root)
+  installCitationStoreSync(() => {
+    const view = getEditorView()
+    if (view && !view.isDestroyed) view.dispatch(view.state.tr.setMeta(citationMarkPluginKey, true))
+  })
 
   // Cmd+click (Mac) / Ctrl+click (Win/Linux) to open links in browser
   root.addEventListener('click', (e) => {
@@ -1121,7 +1135,7 @@ export function getMarkdown(): string {
   editorInstance.action((ctx) => {
     const serializer = ctx.get(serializerCtx)
     const view = ctx.get(editorViewCtx)
-    markdown = serializer(view.state.doc)
+    markdown = normalizeCitationMarkdown(serializer(view.state.doc))
   })
   return markdown
 }

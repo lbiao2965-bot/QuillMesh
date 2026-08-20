@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard as systemClipboard, dialog, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
-import { copyFile, mkdir, readFile, readdir, rename, unlink, writeFile } from 'fs/promises'
+import { copyFile, mkdir, readFile, readdir, rename, unlink, writeFile, appendFile } from 'fs/promises'
 import { existsSync, readFileSync, readdirSync, watch } from 'fs'
 import { randomUUID } from 'crypto'
 import { execFile } from 'child_process'
@@ -10,6 +10,7 @@ import { DEFAULT_APP_SETTINGS, mergeAppSettings, normalizeAppSettings, type AppS
 import { renderDocx, renderPdf, renderPng } from './document-export'
 import { startCodexBridge } from './codex-bridge'
 import { loadAnnotations, saveAnnotations } from './annotations'
+import { BibliographyBindings, findSiblingBibliography, readBibliographyFile } from './bibliography'
 import { isQuillMeshProgId, markdownLaunchPaths, parseRegistryDefaultValue, parseRegistryProgId, type FileAssociationStatus } from './file-association'
 import {
   createDocumentId,
@@ -154,6 +155,7 @@ function ensureThemesDir(): void {
 interface WindowState {
   documents: Map<string, MainDocumentSession>
   pathToDocumentId: Map<string, string>
+  bibliographyBindings: BibliographyBindings
   activeDocumentId: string | null
   siblingsTimer: ReturnType<typeof setTimeout> | null
   agentState: 'idle' | 'active' | 'cooldown'
@@ -229,7 +231,7 @@ function getState(win: BrowserWindow): WindowState {
   let state = windowStates.get(win.id)
   if (!state) {
     state = {
-      documents: new Map(), pathToDocumentId: new Map(), activeDocumentId: null,
+      documents: new Map(), pathToDocumentId: new Map(), bibliographyBindings: new BibliographyBindings(), activeDocumentId: null,
       siblingsTimer: null, agentState: 'idle', lastExternalChange: 0,
       agentCooldownTimer: null, forceClose: false, closePromptOpen: false,
       initialPath: null, initialContent: null, rendererReady: false, discardCloseDocumentIds: new Set(),
@@ -447,6 +449,7 @@ function closeDocument(win: BrowserWindow, documentId: string, discard = false):
   state.discardCloseDocumentIds.delete(documentId)
   stopWatchingDocument(document)
   if (document.path) state.pathToDocumentId.delete(canonicalPathKey(document.path))
+  state.bibliographyBindings.delete(documentId)
   state.documents.delete(documentId)
   if (state.activeDocumentId === documentId) {
     const remaining = [...state.documents.values()]
@@ -1000,6 +1003,29 @@ ipcMain.handle('copy-image-bytes', (_event, bytes: unknown, mime: unknown) => {
   return true
 })
 
+ipcMain.handle('save-image-bytes', async (event, bytes: unknown, mime: unknown, suggestedName: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || !(bytes instanceof Uint8Array) || typeof mime !== 'string') return false
+  const isPng = mime.toLowerCase() === 'image/png'
+  const isSvg = mime.toLowerCase() === 'image/svg+xml'
+  if (!isPng && !isSvg) return false
+  const data = Buffer.from(bytes)
+  if (data.byteLength === 0 || data.byteLength > 50 * 1024 * 1024) return false
+  const extension = isPng ? 'png' : 'svg'
+  const base = typeof suggestedName === 'string' && suggestedName.trim() ? suggestedName.trim() : 'mermaid-diagram'
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath: `${base}.${extension}`,
+    filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+  })
+  if (result.canceled || !result.filePath) return false
+  try {
+    await writeFile(result.filePath, data)
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('copy-table', (_event, html: unknown, text: unknown) => {
   if (typeof html !== 'string' || typeof text !== 'string' || html.length > 5_000_000 || text.length > 5_000_000) return false
   systemClipboard.write({ html, text })
@@ -1075,6 +1101,55 @@ ipcMain.handle('save-annotations', async (event, documentId: unknown, data: unkn
     comments: Array.isArray(payload.comments) ? payload.comments : [],
     suggestions: Array.isArray(payload.suggestions) ? payload.suggestions : [],
   }))
+})
+
+ipcMain.handle('choose-bibliography', async (event, documentId: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof documentId !== 'string') return null
+  const state = getState(win)
+  if (!state.documents.has(documentId)) return null
+  const result = await dialog.showOpenDialog(win, {
+    filters: [
+      { name: 'Bibliography', extensions: ['bib', 'biblatex', 'json'] },
+      { name: t('allFiles'), extensions: ['*'] },
+    ],
+    properties: ['openFile'],
+  })
+  if (result.canceled || !result.filePaths[0]) return null
+  const payload = await readBibliographyFile(result.filePaths[0])
+  if (payload && state.documents.has(documentId)) state.bibliographyBindings.set(documentId, payload.path, 'manual')
+  return payload
+})
+ipcMain.handle('find-bibliography-for-document', async (event, documentId: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof documentId !== 'string') return null
+  const state = getState(win)
+  const document = state.documents.get(documentId)
+  if (!document) return null
+  const binding = state.bibliographyBindings.get(documentId)
+  if (binding?.source === 'manual') return readBibliographyFile(binding.path)
+  const candidate = await findSiblingBibliography(document.path)
+  if (!candidate) {
+    state.bibliographyBindings.delete(documentId)
+    return null
+  }
+  const payload = await readBibliographyFile(candidate)
+  if (payload) state.bibliographyBindings.set(documentId, payload.path, 'sibling')
+  return payload
+})
+ipcMain.handle('append-bibliography-entry', async (event, documentId: unknown, text: unknown) => {
+  const win = getWinFromEvent(event)
+  if (!win || typeof documentId !== 'string' || typeof text !== 'string' || !text.trim()) return false
+  const state = getState(win)
+  if (!state.documents.has(documentId)) return false
+  const path = state.bibliographyBindings.get(documentId)?.path
+  if (!path || !/\.(bib|biblatex)$/i.test(path)) return false
+  try {
+    await queuePathWrite(`bibliography:${canonicalPathKey(path)}`, () => appendFile(path, text, 'utf-8'))
+    return true
+  } catch {
+    return false
+  }
 })
 
 function sendToFocused(channel: string, ...args: unknown[]): void { BrowserWindow.getFocusedWindow()?.webContents.send(channel, ...args) }

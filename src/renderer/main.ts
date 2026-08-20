@@ -50,6 +50,10 @@ import { nextEditVersion, remainsDirtyAfterSave } from './document-save'
 import { aggregateCloseCanComplete } from './close-save'
 import { conflictTargetToCancel } from './conflict-routing'
 import { buildExportDocument } from './export-document'
+import { BibliographyLoadGuard, buildReferencesHtml, citedEntries, citationStyles, formatEntryStyled, getBibliographyPath, hasBibliography, loadBibliographyContent, type CitationStyle } from './citations'
+import { waitForMermaidRenders } from './editor/mermaid-view'
+import { citationPicker } from './editor/citation-picker'
+import { citationMarkPluginKey, setCitationDisplay, type CitationDisplay } from './editor/citation-plugin'
 import { markdownSectionAtLine, sourceSelectionContext } from './codex-context'
 import { iconSvg, setButtonIcon, type IconName } from './icons'
 import type { CodexSendKind, DiskRevision, DocumentPayload, ExportFormat, RecentFile } from '../preload/index'
@@ -514,7 +518,7 @@ function bridgeProposal(requestId: string, payload: Record<string, unknown>): vo
   requestAnimationFrame(() => (accept.disabled ? reject : accept).focus())
 }
 
-function handleCodexBridgeRequest(request: import('../preload/index').CodexBridgeRequest): void {
+async function handleCodexBridgeRequest(request: import('../preload/index').CodexBridgeRequest): Promise<void> {
   if (!appSettings.codexEnabled) { window.electronAPI.respondCodexBridge(request.requestId, null, 'Codex integration is disabled in QuillMesh settings.'); return }
   const { requestId, action, payload } = request
   try {
@@ -536,7 +540,11 @@ function handleCodexBridgeRequest(request: import('../preload/index').CodexBridg
     }
     if (action === 'export-html') {
       if (typeof payload.path === 'string' && session.path?.toLocaleLowerCase() !== payload.path.toLocaleLowerCase()) throw new Error('The requested document is not active.')
-      window.electronAPI.respondCodexBridge(requestId, buildExportDocument(editorEl(), session.displayName.replace(/\.(md|markdown|mdown|mkd)$/i, '')))
+      snapshotActive()
+      if (session.mode !== 'wysiwyg') replaceEditorMarkdown(session, session.content)
+      if (!await awaitBibliographyLoad(session)) throw new Error('The active document changed while preparing the export.')
+      if (!await waitForMermaidRenders(editorEl())) throw new Error(t('mermaidRenderTimeout'))
+      window.electronAPI.respondCodexBridge(requestId, withExportReferences(buildExportDocument(editorEl(), session.displayName.replace(/\.(md|markdown|mdown|mkd)$/i, ''))))
     }
   } catch (error) { window.electronAPI.respondCodexBridge(requestId, null, error instanceof Error ? error.message : String(error)) }
 }
@@ -751,6 +759,7 @@ function activateSession(documentId: string, payload?: Partial<DocumentPayload>)
   // preload forwards that id with its resource IPC; main does not infer it.
   window.electronAPI.setDocumentState(session.documentId, session.dirty)
   applySession(session)
+  scheduleBibliographyLoad(session)
   renderTabs(); renderConflict(); updatePanelVisibility(); void refreshSiblings()
 }
 
@@ -813,6 +822,8 @@ async function requestCloseTab(documentId: string): Promise<void> {
   }
   if (session.autosaveTimer) clearTimeout(session.autosaveTimer)
   sessions.delete(documentId)
+  bibliographyCache.delete(documentId)
+  bibliographyLoads.delete(documentId)
   if (activeDocumentId === documentId) {
     const remaining = [...sessions.values()]
     const next = remaining[Math.min(Math.max(0, closeIndex), Math.max(0, remaining.length - 1))]
@@ -990,6 +1001,192 @@ function setPanel(tab: SidePanelTab): void {
     const active = name === tab; button.classList.toggle('active', active); button.setAttribute('aria-selected', String(active)); panel.hidden = !active
   }
   if (tab === 'outline') scheduleOutline(); if (tab === 'tasks') scheduleTasks()
+}
+
+// ---------- 引用（BibTeX / CSL JSON）：下栏参考文献面板 ----------
+
+let citationsBarVisible = localStorage.getItem('quillmesh-citations-bar') === '1'
+let citationStyle: CitationStyle = (localStorage.getItem('quillmesh-citation-style') as CitationStyle) || 'gbt'
+if (!citationStyles.includes(citationStyle)) citationStyle = 'gbt'
+// 正文引文标注样式：@第一作者（默认）或数字编号 [1]；模块加载即应用，保证首次渲染就用存储值。
+let citationDisplayMode: CitationDisplay = (localStorage.getItem('quillmesh-citation-display') as CitationDisplay) || 'author'
+if (citationDisplayMode !== 'author' && citationDisplayMode !== 'numeric') citationDisplayMode = 'author'
+setCitationDisplay(citationDisplayMode)
+const bibliographyLoadGuard = new BibliographyLoadGuard()
+const bibliographyCache = new Map<string, { path: string; content: string } | null>()
+const bibliographyLoads = new Map<string, Promise<void>>()
+
+/** 切换正文引文标注样式并强制重算编辑器标注。 */
+function applyCitationDisplay(mode: CitationDisplay): void {
+  citationDisplayMode = mode
+  localStorage.setItem('quillmesh-citation-display', mode)
+  setCitationDisplay(mode)
+  const view = getEditorView()
+  if (view && !view.isDestroyed) view.dispatch(view.state.tr.setMeta(citationMarkPluginKey, true))
+}
+
+const citationsBarEl = () => document.getElementById('citations-bar') as HTMLElement
+
+function setCitationsBarVisible(visible: boolean): void {
+  citationsBarVisible = visible
+  localStorage.setItem('quillmesh-citations-bar', visible ? '1' : '0')
+  citationsBarEl().hidden = !visible
+  document.body.classList.toggle('show-citations-bar', visible)
+  const toggle = document.getElementById('citations-toggle-btn') as HTMLButtonElement | null
+  if (toggle) { toggle.classList.toggle('active', visible); toggle.setAttribute('aria-pressed', String(visible)) }
+  if (visible) renderCitationsBar()
+}
+
+/** 下栏中选中的文献 citekey（用于筛选复制/插入，并响应正文引文点击联动）。 */
+const selectedCitationKeys = new Set<string>()
+
+/** 下栏高度（px）：可拖拽调整并在会话间保持。 */
+function applyCitationsBarHeight(px: number): void {
+  const clamped = Math.round(Math.min(Math.max(px, 120), window.innerHeight * 0.7))
+  document.documentElement.style.setProperty('--citations-bar-height', `${clamped}px`)
+  localStorage.setItem('quillmesh-citations-bar-height', String(clamped))
+}
+
+/** 正文点击引文标记：打开下栏、定位并选中对应文献。 */
+function revealCitation(key: string): void {
+  selectedCitationKeys.clear()
+  selectedCitationKeys.add(key)
+  if (!citationsBarVisible) setCitationsBarVisible(true)
+  else renderCitationsBar()
+  document.getElementById('citations-bar-list')
+    ?.querySelector<HTMLElement>(`.citation-row[data-key="${CSS.escape(key)}"]`)
+    ?.scrollIntoView({ block: 'nearest' })
+}
+
+async function loadBibliographyInteractive(): Promise<void> {
+  const session = activeSession()
+  if (!session) return
+  const token = bibliographyLoadGuard.begin(session.documentId)
+  const picked = await window.electronAPI.chooseBibliography(session.documentId)
+  if (!picked || !bibliographyLoadGuard.isCurrent(token, activeSession()?.documentId ?? null)) return
+  bibliographyCache.set(session.documentId, picked)
+  const count = loadBibliographyContent(picked.content, picked.path)
+  showCodexToast(count ? `${t('bibliographyLoaded')} (${count})` : t('bibliographyEmpty'))
+  if (citationsBarVisible) renderCitationsBar()
+}
+
+async function autoLoadBibliography(session: DocumentSession): Promise<void> {
+  const token = bibliographyLoadGuard.begin(session.documentId)
+  const cached = bibliographyCache.get(session.documentId) ?? null
+  loadBibliographyContent(cached?.content ?? '', cached?.path ?? null)
+  if (citationsBarVisible) renderCitationsBar()
+  const found = await window.electronAPI.findBibliographyForDocument(session.documentId).catch(() => null)
+  if (!bibliographyLoadGuard.isCurrent(token, activeSession()?.documentId ?? null)) return
+  bibliographyCache.set(session.documentId, found)
+  loadBibliographyContent(found?.content ?? '', found?.path ?? null)
+  if (citationsBarVisible) renderCitationsBar()
+}
+
+function scheduleBibliographyLoad(session: DocumentSession): void {
+  const task = autoLoadBibliography(session)
+  bibliographyLoads.set(session.documentId, task)
+  const clear = (): void => { if (bibliographyLoads.get(session.documentId) === task) bibliographyLoads.delete(session.documentId) }
+  void task.then(clear, clear)
+}
+
+async function awaitBibliographyLoad(session: DocumentSession): Promise<boolean> {
+  const task = bibliographyLoads.get(session.documentId)
+  if (task) await task
+  return activeSession()?.documentId === session.documentId
+}
+
+function renderCitationsBar(): void {
+  const list = document.getElementById('citations-bar-list') as HTMLOListElement
+  const empty = document.getElementById('citations-bar-empty') as HTMLElement
+  const count = document.getElementById('citations-bar-count') as HTMLElement
+  const pathLabel = document.getElementById('citations-bib-path') as HTMLElement
+
+  const bibPath = getBibliographyPath()
+  pathLabel.hidden = !bibPath
+  if (bibPath) { pathLabel.textContent = bibPath; pathLabel.title = bibPath }
+
+  list.replaceChildren()
+  const session = activeSession()
+  const cited = session ? citedEntries(session.content) : []
+  count.textContent = cited.length ? `${cited.length}` : ''
+  if (!cited.length) {
+    empty.hidden = false
+    empty.textContent = hasBibliography() ? t('citationsEmpty') : t('bibliographyEmpty')
+    return
+  }
+  empty.hidden = true
+  const citedKeys = new Set(cited.map(({ key }) => key))
+  for (const key of Array.from(selectedCitationKeys)) if (!citedKeys.has(key)) selectedCitationKeys.delete(key)
+  for (const { key, entry } of cited) {
+    const item = document.createElement('li')
+    item.className = 'citation-row'
+    item.dataset.key = key
+    if (selectedCitationKeys.has(key)) item.classList.add('selected')
+    if (!entry && hasBibliography()) item.classList.add('missing')
+    item.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('.citation-row-jump')) return
+      if (event.ctrlKey || event.metaKey) {
+        if (selectedCitationKeys.has(key)) selectedCitationKeys.delete(key)
+        else selectedCitationKeys.add(key)
+      } else {
+        selectedCitationKeys.clear()
+        selectedCitationKeys.add(key)
+      }
+      renderCitationsBar()
+    })
+    const text = document.createElement('span')
+    text.className = 'citation-row-text'
+    text.textContent = entry ? formatEntryStyled(entry, citationStyle) : `@${key} — ${t('citeMissing')}`
+    const jump = document.createElement('button')
+    jump.type = 'button'
+    jump.className = 'citation-row-jump'
+    jump.textContent = `@${key}`
+    jump.title = key
+    jump.addEventListener('click', () => {
+      const mark = Array.from(editorEl().querySelectorAll<HTMLElement>('.cite-mark'))
+        .find((element) => (element.dataset.citeKeys ?? '').split(' ').includes(key))
+      mark?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    item.append(text, jump)
+    list.appendChild(item)
+  }
+}
+
+/** 当前文档引用按所选格式排版后的纯文本列表；下栏有选中项时仅取选中项（重新从 1 编号）。 */
+function formattedReferenceLines(): string[] {
+  const session = activeSession()
+  if (!session || !hasBibliography()) return []
+  let cited = citedEntries(session.content)
+  if (selectedCitationKeys.size) cited = cited.filter(({ key }) => selectedCitationKeys.has(key))
+  return cited
+    .map(({ entry }, index) => (entry ? `[${index + 1}] ${formatEntryStyled(entry, citationStyle)}` : ''))
+    .filter(Boolean)
+}
+
+async function copyReferences(): Promise<void> {
+  const lines = formattedReferenceLines()
+  if (!lines.length) { showCodexToast(t('citationsEmpty')); return }
+  await navigator.clipboard.writeText(lines.join('\n'))
+  showCodexToast(t('referencesCopied'))
+}
+
+function insertReferencesAtEnd(): void {
+  const session = activeSession()
+  const lines = formattedReferenceLines()
+  if (!session || !lines.length) { showCodexToast(t('citationsEmpty')); return }
+  const section = `\n\n## ${t('referencesHeading')}\n\n${lines.join('\n')}\n`
+  const content = session.content.replace(/\s+$/, '') + section
+  markSessionChanged(session, content)
+  if (session.mode !== 'source') replaceEditorMarkdown(session, content)
+  else sourceEl().value = content
+}
+
+/** 导出时在文末追加参考文献节（无引用库或无引用时原样返回）。 */
+function withExportReferences(payload: ReturnType<typeof buildExportDocument>): ReturnType<typeof buildExportDocument> {
+  const session = activeSession()
+  const references = session ? buildReferencesHtml(session.content, t('referencesHeading'), citationStyle) : ''
+  if (!references) return payload
+  return { ...payload, html: payload.html.replace('</body>', `${references}</body>`) }
 }
 
 // ---------- 批注与审阅 ----------
@@ -1303,6 +1500,10 @@ function registerCommands(search: SearchPanel): void {
   commands.register({ id: 'view.source', label: () => t('sourceMode'), execute: toggleSourceMode })
   commands.register({ id: 'view.split', label: () => t('splitView'), execute: toggleSplitMode })
   commands.register({ id: 'view.review', label: () => t('reviewMode'), keywords: () => ['review', 'comment', '审阅', '批注'], execute: () => setReviewMode(!reviewMode) })
+  commands.register({ id: 'citations.load', label: () => t('loadBibliography'), keywords: () => ['citation', 'bibliography', 'bib', 'zotero', '引用', '文献'], enabled: () => Boolean(activeSession()), execute: () => { void loadBibliographyInteractive() } })
+  commands.register({ id: 'citations.panel', label: () => t('referencesHeading'), keywords: () => ['references', 'citation', '参考文献', '引用'], execute: () => setCitationsBarVisible(!citationsBarVisible) })
+  commands.register({ id: 'citations.insert', label: () => t('insertCitation'), keywords: () => ['cite', '引用'], enabled: () => hasBibliography(), execute: () => citationPicker.show(activeSession()?.documentId ?? null) })
+  commands.register({ id: 'citations.addBibtex', label: () => t('addBibtexEntry'), keywords: () => ['bibtex', '文献'], execute: () => citationPicker.show(activeSession()?.documentId ?? null, true) })
   commands.register({ id: 'app.settings', label: () => t('settings'), keywords: () => ['preferences', 'font', 'theme', 'Codex'], execute: openSettings })
   commands.register({ id: 'codex.sendSelection', label: () => t('codexSendSelection'), keywords: () => ['Codex', 'AI', 'selection'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('selection') })
   commands.register({ id: 'codex.sendSection', label: () => t('codexSendSection'), keywords: () => ['Codex', 'AI', 'section', 'heading'], enabled: () => appSettings.codexEnabled && Boolean(activeSession()), execute: () => sendCodexContext('section') })
@@ -1445,6 +1646,7 @@ function showEditorContextMenu(event: MouseEvent): void {
     void sendCodexContext('selection')
   }, 'Codex')
   if (hasSelection) appendMenuRow(rows, t('addComment'), () => openCommentEditor(), '💬')
+  appendMenuRow(rows, t('insertCitation'), () => citationPicker.show(activeSession()?.documentId ?? null), '@')
   appendInsertMenu(surface)
   showMenu(surface, event.clientX, event.clientY)
 }
@@ -1528,8 +1730,12 @@ function installLinkPreview(): void {
 async function exportCurrent(format: ExportFormat): Promise<void> {
   const session = activeSession(); if (!session) return
   snapshotActive(); if (session.mode !== 'wysiwyg') replaceEditorMarkdown(session, session.content)
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-  await window.electronAPI.exportDocument(format, buildExportDocument(editorEl(), session.displayName.replace(/\.[^.]+$/, '') || t('untitled')))
+  if (!await awaitBibliographyLoad(session)) return
+  if (!await waitForMermaidRenders(editorEl())) {
+    showCodexToast(t('mermaidRenderTimeout'))
+    return
+  }
+  await window.electronAPI.exportDocument(format, withExportReferences(buildExportDocument(editorEl(), session.displayName.replace(/\.[^.]+$/, '') || t('untitled'))))
 }
 
 async function pasteImage(file: File): Promise<void> {
@@ -1710,6 +1916,51 @@ async function init(): Promise<void> {
   window.addEventListener('colamd-document-changed', scheduleCommentMarks)
   fileListEl().addEventListener('click', (event) => { const path = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-path]')?.dataset.path; const session = activeSession(); if (path && session) void api.openSibling(session.documentId, path) })
   ;(document.getElementById('tasks-open-only') as HTMLInputElement).addEventListener('change', renderTasks)
+  document.getElementById('citations-toggle-btn')?.addEventListener('click', () => setCitationsBarVisible(!citationsBarVisible))
+  document.getElementById('citations-bar-close')?.addEventListener('click', () => setCitationsBarVisible(false))
+  document.getElementById('citations-load-btn')?.addEventListener('click', () => { void loadBibliographyInteractive() })
+  document.getElementById('citations-copy-btn')?.addEventListener('click', () => { void copyReferences() })
+  document.getElementById('citations-insert-btn')?.addEventListener('click', () => insertReferencesAtEnd())
+  ;(document.getElementById('citations-style-select') as HTMLSelectElement | null)?.addEventListener('change', (event) => {
+    citationStyle = (event.target as HTMLSelectElement).value as CitationStyle
+    localStorage.setItem('quillmesh-citation-style', citationStyle)
+    renderCitationsBar()
+  })
+  ;(() => { const select = document.getElementById('citations-style-select') as HTMLSelectElement | null; if (select) select.value = citationStyle })()
+  // 正文引文标注样式切换（@作者 / [1] 编号）
+  ;(() => {
+    const select = document.getElementById('citations-display-select') as HTMLSelectElement | null
+    if (!select) return
+    select.value = citationDisplayMode
+    select.addEventListener('change', () => applyCitationDisplay(select.value as CitationDisplay))
+  })()
+  // 下栏拖拽调高：拖动顶部分隔条调整，范围 120px ~ 窗口 70%，并持久化。
+  const storedBarHeight = Number(localStorage.getItem('quillmesh-citations-bar-height'))
+  if (storedBarHeight) applyCitationsBarHeight(storedBarHeight)
+  const barResize = document.getElementById('citations-bar-resize')
+  barResize?.addEventListener('pointerdown', (event) => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startHeight = citationsBarEl().getBoundingClientRect().height
+    barResize.classList.add('dragging')
+    barResize.setPointerCapture(event.pointerId)
+    const onMove = (move: PointerEvent) => applyCitationsBarHeight(startHeight + (startY - move.clientY))
+    const onUp = () => {
+      barResize.classList.remove('dragging')
+      barResize.removeEventListener('pointermove', onMove)
+      barResize.removeEventListener('pointerup', onUp)
+      barResize.removeEventListener('pointercancel', onUp)
+    }
+    barResize.addEventListener('pointermove', onMove)
+    barResize.addEventListener('pointerup', onUp)
+    barResize.addEventListener('pointercancel', onUp)
+  })
+  window.addEventListener('quill-citation-reveal', (event) => revealCitation((event as CustomEvent<string>).detail))
+  setCitationsBarVisible(citationsBarVisible)
+  window.addEventListener('quill-bibliography-changed', () => { if (citationsBarVisible) renderCitationsBar() })
+  window.addEventListener('quill-bibliography-added', (event) => showCodexToast(`${t('entriesAdded')} (${(event as CustomEvent<number>).detail})`))
+  window.addEventListener('quill-bibliography-save-failed', () => showCodexToast(t('bibliographySaveFailed')))
+  window.addEventListener('colamd-document-changed', () => { if (citationsBarVisible) renderCitationsBar() })
   ;(document.getElementById('tasks-list') as HTMLElement).addEventListener('click', (event) => { const text = (event.target as HTMLElement).closest<HTMLButtonElement>('.task-item')?.dataset.task; if (!text) return; Array.from(editorEl().querySelectorAll('li[data-item-type="task"]')).find((item) => item.textContent?.includes(text))?.scrollIntoView({ behavior: 'smooth', block: 'center' }) })
   sourceEl().addEventListener('focus', () => { lastCodexSelectionSurface = 'source' })
   sourceEl().addEventListener('input', () => {
@@ -1860,6 +2111,19 @@ function refreshStaticLabels(): void {
   ;(document.getElementById('review-filter-resolved') as HTMLElement).textContent = t('reviewResolved')
   ;(document.getElementById('review-filter-all') as HTMLElement).textContent = t('reviewAll')
   ;(document.getElementById('review-empty') as HTMLElement).textContent = t('reviewEmpty')
+  ;(document.getElementById('citations-bar-title') as HTMLElement).textContent = t('referencesHeading')
+  ;(document.getElementById('citations-toggle-btn') as HTMLElement).textContent = t('referencesHeading')
+  ;(document.getElementById('citations-copy-btn') as HTMLElement).textContent = t('copyReferences')
+  ;(document.getElementById('citations-insert-btn') as HTMLElement).textContent = t('insertAtEnd')
+  ;(document.getElementById('citations-load-btn') as HTMLElement).textContent = t('loadBibliography')
+  ;(document.getElementById('citations-display-author') as HTMLElement).textContent = t('citationAuthorDisplay')
+  ;(document.getElementById('citations-display-numeric') as HTMLElement).textContent = t('citationNumericDisplay')
+  const citationsDisplaySelect = document.getElementById('citations-display-select') as HTMLSelectElement
+  citationsDisplaySelect.setAttribute('aria-label', t('citationMarkStyle'))
+  const citationsStyleSelect = document.getElementById('citations-style-select') as HTMLSelectElement
+  citationsStyleSelect.setAttribute('aria-label', t('citationReferenceStyle'))
+  const citationsClose = document.getElementById('citations-bar-close') as HTMLButtonElement
+  citationsClose.title = t('close'); citationsClose.setAttribute('aria-label', t('close'))
   ;(document.getElementById('tasks-open-only-label') as HTMLElement).textContent = t('openTasksOnly')
   ;(document.getElementById('tasks-empty') as HTMLElement).textContent = t('noTasks')
   ;(document.getElementById('split-view-btn') as HTMLElement).textContent = t('splitView')
@@ -1876,6 +2140,7 @@ function refreshStaticLabels(): void {
   ;(document.getElementById('fullscreen-exit-hint') as HTMLElement).textContent = t('fullscreenExitHint')
   ;(document.getElementById('fullscreen-exit-btn') as HTMLElement).textContent = t('exitFullscreen')
   updateCodexChrome()
+  if (citationsBarVisible) renderCitationsBar()
   renderWelcomeRecent()
   renderAutosave()
 }
